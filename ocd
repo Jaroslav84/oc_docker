@@ -1,0 +1,37 @@
+#!/bin/bash
+
+set -e
+
+SCRIPT_DIR="$( cd "$( dirname "$( realpath "${BASH_SOURCE[0]}" )" )" && pwd )"
+
+# Check if Docker is running
+if ! docker info > /dev/null 2>&1; then
+    echo "Docker is not running. Starting Docker Desktop..."
+    
+    # Start Docker Desktop on macOS
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        open -a Docker
+    else
+        echo "Please start Docker manually on your system"
+        exit 1
+    fi
+
+    echo "Waiting for Docker to start (this may take a minute)..."
+    max_wait=60
+    waited=0
+    until docker info > /dev/null 2>&1; do
+        if [ $waited -ge $max_wait ]; then
+            echo -e "\nError: Docker did not start within $max_wait seconds"
+            exit 1
+        fi
+        echo -n "."
+        sleep 2
+        waited=$((waited + 2))
+    done
+    echo -e "\nDocker is ready!"
+fi
+
+cd "$SCRIPT_DIR"
+
+echo "Starting OpenCode sandbox..."
+docker compose run --rm opencode

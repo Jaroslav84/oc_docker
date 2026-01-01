@@ -1,0 +1,23 @@
+services:
+  opencode:
+    build: .
+    image: oc-docker:latest
+    container_name: oc-docker
+    hostname: oc-docker
+    env_file:
+      - .env
+    volumes:
+      - ~/Projects:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    network_mode: host
+    environment:
+      - SANDBOX_MODE=true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
