@@ -7,10 +7,11 @@ services:
     env_file:
       - .env
     volumes:
-      - ~/Projects:/Projects
+      - ~/Projects:/root/Projects
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ~/.oc_docker:/root  # Persist entire /root directory to ensure all OpenCode data (config, sessions, API keys) is saved
-    working_dir: /Projects
+      - ./opencode.config.jsonc:/tmp/opencode.config.jsonc:ro  # Mount OpenCode config file (JSONC with comments)
+    working_dir: /root/Projects
     stdin_open: true
     tty: true
     network_mode: host

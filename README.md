@@ -27,7 +27,7 @@ ocd
 This will:
 - Auto-start Docker Desktop if it's not running (macOS)
 - Launch OpenCode automatically in the sandbox container
-- Mount your ~/Projects directory at /Projects
+- Mount your ~/Projects directory at /root/Projects
 - Load environment variables from .env
 - Persist all OpenCode data (sessions, API keys, config) to ~/.oc_docker
 

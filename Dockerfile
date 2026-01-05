@@ -8,9 +8,10 @@ RUN apt-get update && apt-get install -y \
     curl \
     wget \
     vim \
+    gettext-base \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /Projects
+WORKDIR /root/Projects
 
 RUN npm install -g opencode-ai
 
