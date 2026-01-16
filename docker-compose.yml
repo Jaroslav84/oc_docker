@@ -1,15 +1,16 @@
 services:
-  opencode:
+  llm_docker:
     build: .
-    image: oc-docker:latest
-    container_name: oc-docker
-    hostname: oc-docker
+    image: llm-docker:latest
+    container_name: llm-docker
+    hostname: llm-docker
     env_file:
       - .env
     volumes:
       - ~/Projects:/root/Projects
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ~/.oc_docker:/root  # Persist entire /root directory to ensure all OpenCode data (config, sessions, API keys) is saved
+      - ~/.llm_docker/opencode:/root  # Persist entire /root directory for OpenCode data (config, sessions, API keys)
+      - ~/.llm_docker/claude:/root_claude  # Persist Claude Code data separately (entrypoint will handle symlinking)
       - ./opencode.config.jsonc:/tmp/opencode.config.jsonc:ro  # Mount OpenCode config file (JSONC with comments)
     working_dir: /root/Projects
     stdin_open: true
@@ -17,6 +18,10 @@ services:
     network_mode: host
     environment:
       - SANDBOX_MODE=true
+      - TERM=${TERM:-xterm-256color}
+      - COLUMNS=${COLUMNS:-80}
+      - LINES=${LINES:-24}
+      - TOOL=${TOOL:-opencode}  # Select which tool to run: 'opencode' or 'claude'
     cap_drop:
       - ALL
     cap_add:

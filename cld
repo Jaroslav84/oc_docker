@@ -6,7 +6,7 @@ SCRIPT_DIR="$( cd "$( dirname "$( realpath "${BASH_SOURCE[0]}" )" )" && pwd )"
 
 # Check if Docker is running
 if ! docker info > /dev/null 2>&1; then
-    echo "Docker is not running. Starting Docker Desktop App..."
+    echo "Docker is not running. Starting Docker Desktop..."
     
     # Start Docker Desktop on macOS
     if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -53,7 +53,7 @@ else
     echo "Warning: Current directory is outside ~/Projects, starting in /root/Projects"
 fi
 
-echo "Starting OpenCode sandbox in $DOCKER_WORKDIR..."
+echo "Starting Claude Code sandbox in $DOCKER_WORKDIR..."
 
 # Forward terminal environment variables for proper mouse reporting and scrolling
 # Get terminal size if available
@@ -66,9 +66,27 @@ fi
 # Ensure TERM is set (default to xterm-256color for iTerm compatibility)
 export TERM=${TERM:-xterm-256color}
 
-docker compose run --rm -w "$DOCKER_WORKDIR" \
+# Use docker run directly to have control over volume mounts for Claude
+# Load environment variables from .env file if it exists
+ENV_FILE=""
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    ENV_FILE="--env-file $SCRIPT_DIR/.env"
+fi
+
+docker run --rm -it \
+    -w "$DOCKER_WORKDIR" \
+    -v ~/Projects:/root/Projects \
+    -v /var/run/docker.sock:/var/run/docker.sock:ro \
+    -v ~/.llm_docker/claude:/root \
+    -v "$SCRIPT_DIR/opencode.config.jsonc:/tmp/opencode.config.jsonc:ro" \
+    --network host \
+    --cap-drop ALL \
+    --cap-add NET_BIND_SERVICE \
+    --security-opt no-new-privileges:true \
+    -e SANDBOX_MODE=true \
     -e TERM \
     -e COLUMNS \
     -e LINES \
-    -e TOOL=opencode \
-    llm_docker
+    -e TOOL=claude \
+    $ENV_FILE \
+    llm-docker:latest
