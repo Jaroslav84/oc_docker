@@ -1,29 +1,58 @@
-# llm-docker
+# 🐳 llm-docker
 
-**A secure, sandboxed Docker environment for running OpenCode and Claude Code with complete data isolation and privacy**
+![Version](https://img.shields.io/badge/Version-v1.1-blue?style=for-the-badge)
+![AI Powered](https://img.shields.io/badge/AI-Powered-FF4B4B?style=for-the-badge&logo=openai&logoColor=white)
+![Claude Code](https://img.shields.io/badge/Claude_Code-Supported-D1913C?style=for-the-badge&logo=anthropic&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Isolated-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![Security](https://img.shields.io/badge/Security-Sandboxed-8A2BE2?style=for-the-badge&logo=lock&logoColor=white)
+![Shell](https://img.shields.io/badge/Shell-Automated-4EAA25?style=for-the-badge&logo=gnu-bash&logoColor=white)
 
-**How it works:** 
-Run `ocd` command instead of `opencode`, or `cld` command instead of `claude`. Simple as that.
+![llm-docker Logo](llm_docker_logo.png)
 
-**llm-docker will automatically:**
-* 🐳 Auto-start Docker Desktop if it's not running (macOS)
-* 🔐 Load API keys from `.env` file
-* ⚙️ Apply OpenCode configuration from `opencode.config.jsonc`
-* 📂 Start in your current directory (mapped to `/root/Projects/...`)
-* 🤖 Launch OpenCode or Claude Code automatically in the isolated environment
-* 💾 Persist all data to `~/.llm_docker/opencode` (OpenCode) or `~/.llm_docker/claude` (Claude Code) (survives restarts)
+---
 
-## Setup procedure
+## 📘 About
+
+**llm-docker** provides a secure, sandboxed environment for running **OpenCode** and **Claude Code** with complete data isolation and privacy on macOS.
+
+Stop worrying about local dependencies or data leaks. Run your AI agents in a controlled Docker environment that automatically manages keys, configs, and persistence.
+
+![llm-docker Screenshot](screenshot.png)
+
+---
+
+## 🚀 Quick Start
+
+Run these commands instead of the native tools:
+
+*   **OpenCode**: `ocd`
+*   **Claude Code**: `cld`
+
+Simple as that. The environment handles the rest.
+
+You can use `ocd ./my-path` too with params `ocd ./my-path -c`
+
+---
+
+## 🛠️ Setup Procedure
 
 ### 1. Create `.env` File
 
-Create a `.env` file in the llm_docker directory with your API keys:
+Create a `.env` file in the llm_docker directory with your API keys and settings:
 
 ```bash
-cat > .env << EOF
+cat > .env << 'EOF'
+# ============================================
+# OpenCode API Keys
+# ============================================
 OPENAI_API_KEY=sk-your-openai-key-here
 ZAI_API_KEY=your-zai-key-here
+
+# ============================================
+# Claude Code API Keys
+# ============================================
 ANTHROPIC_API_KEY=sk-ant-your-anthropic-key-here
+CLAUDE_CODE_MAX_OUTPUT_TOKENS=48000
 EOF
 ```
 

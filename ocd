@@ -33,6 +33,13 @@ fi
 
 # Capture current directory before changing to script directory
 CURRENT_DIR=$(pwd)
+
+# Check if first argument is a directory
+if [ -d "$1" ]; then
+    CURRENT_DIR=$(realpath "$1")
+    shift
+fi
+
 cd "$SCRIPT_DIR"
 
 # Calculate the working directory inside Docker
@@ -50,7 +57,7 @@ if [[ "$CURRENT_DIR" == "$PROJECTS_DIR"* ]]; then
 else
     # If outside ~/Projects, default to /root/Projects
     DOCKER_WORKDIR="/root/Projects"
-    echo "Warning: Current directory is outside ~/Projects, starting in /root/Projects"
+    echo "Warning: Path $CURRENT_DIR is outside ~/Projects, starting in /root/Projects"
 fi
 
 echo "Starting OpenCode sandbox in $DOCKER_WORKDIR..."
@@ -71,4 +78,4 @@ docker compose run --rm -w "$DOCKER_WORKDIR" \
     -e COLUMNS \
     -e LINES \
     -e TOOL=opencode \
-    llm_docker
+    llm_docker "$@"

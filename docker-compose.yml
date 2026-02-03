@@ -12,6 +12,7 @@ services:
       - ~/.llm_docker/opencode:/root  # Persist entire /root directory for OpenCode data (config, sessions, API keys)
       - ~/.llm_docker/claude:/root_claude  # Persist Claude Code data separately (entrypoint will handle symlinking)
       - ./opencode.config.jsonc:/tmp/opencode.config.jsonc:ro  # Mount OpenCode config file (JSONC with comments)
+      - ./docker-entrypoint.sh:/usr/local/bin/docker-entrypoint.sh:ro # Mount entrypoint for instant updates
     working_dir: /root/Projects
     stdin_open: true
     tty: true

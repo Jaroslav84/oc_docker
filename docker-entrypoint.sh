@@ -42,12 +42,13 @@ if [ "$TOOL" = "opencode" ]; then
     # These are automatically loaded from .env file via docker-compose.yml
 
     # Run OpenCode
-    echo "Starting OpenCode..."
-    opencode
-
-    # When OpenCode exits, drop to shell
-    echo "OpenCode exited. Dropping to shell..."
-    exec /bin/bash
+    if [ $# -gt 0 ]; then
+        echo "Starting OpenCode with arguments: $@"
+    else
+        echo "Starting OpenCode..."
+    fi
+    opencode "$@"
+    exit $?
 
 elif [ "$TOOL" = "claude" ]; then
     # Ensure Claude config directory exists
@@ -57,12 +58,13 @@ elif [ "$TOOL" = "claude" ]; then
     # These are automatically loaded from .env file via docker-compose.yml or docker run
 
     # Run Claude Code
-    echo "Starting Claude Code..."
-    claude
-
-    # When Claude Code exits, drop to shell
-    echo "Claude Code exited. Dropping to shell..."
-    exec /bin/bash
+    if [ $# -gt 0 ]; then
+        echo "Starting Claude Code with arguments: $@"
+    else
+        echo "Starting Claude Code..."
+    fi
+    claude "$@"
+    exit $?
 
 else
     echo "Error: Unknown TOOL value: $TOOL. Valid values are 'opencode' or 'claude'."
