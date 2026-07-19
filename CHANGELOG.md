@@ -1,3 +1,34 @@
+# v3.0.1 (2026-07-07)
+
+Big Builder-API panel + safety release: a new live "verbose" console, a full ywizz visual pass on the panels, outbound SSH from the cage, deletion + mount guards so an agent can't wipe your work, and a large internal file-split backed by CI guards.
+
+## Builder API
+- [NEW] Third side pane — a live **verbose console**. Every API call prints with its response, and a running job's build logs stream in underneath. Pure scrollable output, no timestamps.
+- [TWEAK] Full panel redesign — new box-drawing LLM-DOCKER / API logo (centered, tracks the pane width), a purple/blue palette (no more gray or dark-green), and a per-family **emoji + colour** on every job (🐍 python, 🐳 compose, 🎸 git, 🪫 redis, 🐘 php …) so the jobs list + event tail scan by category.
+- [TWEAK] Colored **title bars** on each pane — status (blue), api (purple), verbose (pink).
+- [TWEAK] Event tail is job-first: `✓ pytest done·1.2s`, `✗ git-log 412 hash mismatch·n=5` — job name + params + a plain-English reason, with the http/ip/method noise dropped and no wasted column padding.
+- [TWEAK] Tighter header — single-row box, flush-left, dropped the redundant "jobs" label (every column counts on a narrow pane).
+- [BUG] Panes clear screen + scrollback on start, so leftover intro-animation / prompt junk no longer shows above the banner.
+- [BUG] Verbose pane no longer gets stuck in a `ConnectionRefused` reconnect loop — it's now launched pointed at the daemon's actual `127.0.0.1` + resolved port instead of a stale env value.
+- 
+## cld & ocd
+- [NEW] **Outbound SSH** — drop a key + config in `~/.llm-docker/ssh-out/` and every container can `ssh` out (e.g. into a LAN box) passwordlessly; installed into `~/.ssh` with correct perms at container start.
+- [NEW] The **main pane's iTerm tab is tinted with the project's colour** (same hue cld-status uses) on every launch — projects are colour-coded automatically, even without `-a`.
+- [BUG] Ctrl+C-twice teardown now closes **all** the right-column panes (status + api + verbose), not just the middle api pane.
+- [TWEAK] cld-status CPU **sparkline stretches to the pane width** (was a fixed 12 chars).
+- [BUG] The `-a` verbose pane was hammering the daemon with unauthenticated requests and tripping its own 5-minute rate-limit lockout — it now gets the password via the secret handoff and backs off on auth errors instead of spamming.
+
+## Security & safety
+- [NEW] Workspace mounts **read-only**, with only the current project writable — an agent can no longer wipe `~/Projects` or a sibling project through the mount.
+- [NEW] `rm` inside the container **routes to Trash** instead of destroying files; protected roots (the workspace, `~/.claude`, home, `/`) refuse outright.
+- [CHANGE] Sessions are keyed by **project folder name**, not the full path — moving or renaming the workspace no longer loses Claude/OpenCode's session + memory.
+
+### Dev logs
+- [CHANGE] Large LLM-friendly file splits (public APIs unchanged): `server.py` (942→163 + `app_context`/`routes`/`http_handler`), `jobs.py`/`config.py`/`build_queue.py` into sibling modules, `setup.sh` (1188) → `setup/*.sh` loader, `install.sh` (799) → `install.d/*` step driver, `docker-entrypoint.sh` → `entrypoint-lib.sh` (co-mounted).
+- [NEW] Four CI guards in `scripts/ci/`: `no-rm` (bans bare `rm`), `check-modules` (pins the setup.sh function contract + install.d ordering), `check-py` (py_compile + AST undefined-name audit + `import server` smoke — caught real missing imports), `check-size` (advisory line cap).
+- [CHANGE] cld/ocd deduped — shared helpers (`_maybe_start_api`, `_ensure_docker_running`, `spawn_multi_windows`, terminal/handoff/teardown, tab-color) lifted into `setup/` modules; `run_*_container` moved to `cld.run.sh`/`ocd.run.sh`.
+- [NEW] Daemon fans a live `http_call` event (call + response, `persist=False`) from `_serve_json` + the auth-reject path; `cld-verbose` renders it over `/ws`, with the api pane's http access-log silenced.
+
 # v3.0 (2026-06-28)
 
 ## cld & ocd
@@ -102,7 +133,7 @@ Generic commands across every project, per-project settings, and a live status p
 - [CHANGE] `src/cld` + `src/ocd` port resolution reads `~/.llm-docker/api_config/<name>.toml` first, base second, `BUILDER_API_PORT` env third, default 6666 last. Both probe `lsof -ti :$port` before spawning and skip cleanly if anything is bound.
 - [CHANGE] `src/ocd` ported `flock`-based Docker-launch serialization from `src/cld`. Shared lock at `/tmp/cld-docker-start.lock`.
 - [CHANGE] `src/builder-api/builder_api.applescript` — split path snapshots the outer iTerm window bounds, applies `set columns to winCols`, then restores bounds. `winCols` cut to 40. `clear;` removed from the typed cmd.
-- [CHANGE] Repo layout: `api_config/builder-api.toml` (base) + `api_config/{llm-docker,slav-ai}.toml` (shards). The legacy `projects/` directory and root-level `builder-api.toml` are gone.
+- [CHANGE] Repo layout: `api_config/builder-api.toml` (base) + `api_config/{llm-docker,project_x}.toml` (shards). The legacy `projects/` directory and root-level `builder-api.toml` are gone.
 - [TWEAK] CLAUDE.md gains a "No auto daemon restart in examples" rule: install commands never chain `&& cld -c -a`. Yaro picks the restart timing himself across multiple terminals.
 - [TWEAK] Banner subtitle rebranded "Builder API" → "LLM-docker API". Internal env vars + Python identifiers + paths under `src/builder-api/` keep their names for back-compat.
 

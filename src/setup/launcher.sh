@@ -79,8 +79,11 @@ _teardown_builder_api() {
     # macOS only (AppleScript). The script self-guards which terminal app is
     # actually running (iTerm or Terminal.app), so no TERM_PROGRAM lock here.
     if [ "${_BUILDER_API_PANES:-0}" = "1" ] && [[ "$OSTYPE" == darwin* ]]; then
+        # Pass our OWN tty so the teardown closes the whole right column
+        # (status/api/verbose) in this tab and spares only this pane.
+        local _caller_tty; _caller_tty="$(tty 2>/dev/null || true)"
         osascript "$SCRIPT_DIR/builder-api/close_api_panes.applescript" \
-            "$_BUILDER_API_PORT" "$CURRENT_DIR" >/dev/null 2>&1 || true
+            "$_BUILDER_API_PORT" "$CURRENT_DIR" "$_caller_tty" >/dev/null 2>&1 || true
     fi
     lsof -ti :"$_BUILDER_API_PORT" 2>/dev/null | xargs kill 2>/dev/null || true
 }
@@ -162,14 +165,19 @@ _maybe_start_api() {
         # (unlike the api pane) it isn't handed the daemon's secrets. Give it
         # its OWN short-lived handoff: source it for the password, delete it,
         # then exec. Falls back to a bare exec (cld-verbose warns) if none.
+        # Force the daemon's ACTUAL host+port onto cld-verbose (as env prefixes
+        # on exec, so they win over any stale values sourced from the handoff).
+        # It runs on the host, so the daemon is 127.0.0.1 — NOT the container's
+        # BUILDER_API_HOST (host.docker.internal), and NOT a leftover PORT.
+        local _vb_env="BUILDER_API_HOST=127.0.0.1 BUILDER_API_PORT=$port"
         local verbose_cmd=""
         if [ -x "$SCRIPT_DIR/cld-verbose" ]; then
             local _vhandoff
             _vhandoff="$(_write_secret_handoff)"
             if [ -n "$_vhandoff" ]; then
-                verbose_cmd="source '$_vhandoff'; /bin/rm -f '$_vhandoff'; exec '$SCRIPT_DIR/cld-verbose'"
+                verbose_cmd="source '$_vhandoff'; /bin/rm -f '$_vhandoff'; $_vb_env exec '$SCRIPT_DIR/cld-verbose'"
             else
-                verbose_cmd="exec '$SCRIPT_DIR/cld-verbose'"
+                verbose_cmd="$_vb_env exec '$SCRIPT_DIR/cld-verbose'"
             fi
         fi
 

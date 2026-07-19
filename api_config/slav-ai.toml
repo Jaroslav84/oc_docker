@@ -506,3 +506,57 @@ args         = ["-project", "src/slav-ai-swift/slav-ai-swift.xcodeproj", "-schem
 timeout_s    = 900
 kill_after_s = 15
 description  = "Build `Jobsite Link` scheme for macOS"
+
+# ── doctor (drug clash-detection) + CASTER probe — Mac host ──
+[project.slav-ai.jobs.doctor-test]
+command      = "bash"
+args         = ["run_tests.sh", "phase1"]
+cwd          = "doctor"
+timeout_s    = 300
+kill_after_s = 5
+description  = "Doctor Phase-1 clash-detection suite (the meaningful green/red signal)"
+
+[project.slav-ai.jobs.doctor-build-index]
+command            = "python3"
+args               = ["-m", "cli.build_index"]
+cwd                = "doctor"
+timeout_s          = 3600
+kill_after_s       = 15
+mutates_filesystem = true
+description        = "Build openFDA/TWOSIDES/OFFSIDES SQLite indexes (one-time, ~2GB)"
+
+[project.slav-ai.jobs.caster-setup]
+command            = "bash"
+args               = ["-c", "python3 -m venv doctor/scripts/caster/.venv && doctor/scripts/caster/.venv/bin/pip install -r doctor/scripts/caster/requirements.txt"]
+timeout_s          = 1800
+kill_after_s       = 15
+mutates_filesystem = true
+description        = "Create CASTER venv + install torch/chemicalx/rdkit (heavy)"
+
+[project.slav-ai.jobs.caster-run]
+command            = "doctor/scripts/caster/.venv/bin/python"
+args               = ["doctor/scripts/caster/run_caster.py", "--pairs", "{input}", "--out", "doctor/scripts/caster/caster_cache.json"]
+timeout_s          = 1800
+kill_after_s       = 15
+mutates_filesystem = true
+description        = "Run CASTER drug-interaction probe on a pairs JSON"
+[project.slav-ai.jobs.caster-run.placeholders.input]
+regex    = "^[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)*\\.json$"
+max_len  = 200
+required = true
+
+[project.slav-ai.jobs.doctor-test-phase2]
+command      = "bash"
+args         = ["run_ingest_tests.sh"]
+cwd          = "doctor"
+timeout_s    = 900
+kill_after_s = 10
+description  = "Doctor Phase-2 ingest/OCR suite (uses .venv-ocr — Surya/Paddle/OpenCV/pyzbar)"
+
+[project.slav-ai.jobs.doctor-ocr-smoke]
+command      = "bash"
+args         = ["scripts/ocr_smoke.sh"]
+cwd          = "doctor"
+timeout_s    = 300
+kill_after_s = 5
+description  = "Fast single-page Surya OCR smoke (iteration loop)"

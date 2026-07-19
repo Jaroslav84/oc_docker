@@ -63,6 +63,12 @@ run_opencode_container() {
         SSH_HOST_KEY_MOUNT="-v $HOME/.llm-docker/ssh:/etc/ssh/keys"
     fi
 
+    # Outbound SSH: mount user-supplied client keys + config (read-only) so
+    # `ssh <host>` works from inside the container (e.g. a LAN PS4). Only when
+    # ~/.llm-docker/ssh-out/ exists; the entrypoint installs it with strict perms.
+    SSH_OUT_MOUNT=""
+    [ -d "$HOME/.llm-docker/ssh-out" ] && SSH_OUT_MOUNT="-v $HOME/.llm-docker/ssh-out:/root/.ssh-out:ro"
+
     # Session restore resolution:
     #   -c <UUID>     → RESUME_SESSION (direct)
     #   -c -s N       → read slot file, fall into RESUME_SESSION
@@ -176,6 +182,7 @@ run_opencode_container() {
         -v "$SCRIPT_DIR/ascii/llm-docker.txt:/opt/llm-docker/ascii.txt:ro" \
         -v "$SCRIPT_DIR/docker/colorize.sh:/opt/llm-docker/colorize.sh:ro" \
         $SSH_HOST_KEY_MOUNT \
+        $SSH_OUT_MOUNT \
         -e NODE_ENV="${NODE_ENV:-production}" \
         -e SANDBOX_ENABLED="${SANDBOX_ENABLED:-true}" \
         -e INTERNET_ACCESS="${INTERNET_ACCESS:-true}" \

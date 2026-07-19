@@ -89,6 +89,19 @@ if [ "${LLM_DOCKER_SSH_ENABLED:-false}" = "true" ] && [ -x /setup-ssh.sh ]; then
     /setup-ssh.sh || echo "[SSH] setup-ssh.sh failed — container continues without ssh"
 fi
 
+# Outbound SSH: if the host mounted ~/.llm-docker/ssh-out at /root/.ssh-out,
+# install its keys + config into ~/.ssh with strict perms (ssh refuses a
+# group/world-readable private key, and a :ro bind-mount can't be chmod'd).
+# Lets `ssh <host>` from inside the container reach e.g. a LAN box.
+if [ -d /root/.ssh-out ]; then
+    mkdir -p /root/.ssh && chmod 700 /root/.ssh
+    for _f in /root/.ssh-out/*; do
+        [ -f "$_f" ] || continue
+        cp "$_f" "/root/.ssh/$(basename "$_f")" && chmod 600 "/root/.ssh/$(basename "$_f")"
+    done
+    unset _f
+fi
+
 # Auto-update claude-code and opencode on launch when UPDATE_ON_START=true.
 # Skipped when internet is blocked (npm registry unreachable).
 # Throttled to once per 24h via a marker in /root/.claude/ (host-persisted

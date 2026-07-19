@@ -145,6 +145,13 @@ run_claude_container() {
         SSH_HOST_KEY_MOUNT="-v $HOME/.llm-docker/ssh:/etc/ssh/keys"
     fi
 
+    # Outbound SSH: mount user-supplied client keys + config (read-only) so
+    # `ssh <host>` works from inside the container — e.g. to reach a LAN box
+    # like a PS4. Only when ~/.llm-docker/ssh-out/ exists on the host. The
+    # entrypoint copies it into ~/.ssh with strict perms so ssh accepts it.
+    SSH_OUT_MOUNT=""
+    [ -d "$HOME/.llm-docker/ssh-out" ] && SSH_OUT_MOUNT="-v $HOME/.llm-docker/ssh-out:/root/.ssh-out:ro"
+
     # Codeman exposes its web UI on port 3000 — needs bridge networking to
     # publish with `-p`. In host mode the port is already reachable on localhost.
     CODEMAN_PORT_MAPPING=""
@@ -226,6 +233,7 @@ run_claude_container() {
         -v "$SCRIPT_DIR/docker/colorize.sh:/opt/llm-docker/colorize.sh:ro" \
         -v "$SCRIPT_DIR/llm-container-claude-settings.json:/opt/llm-docker/templates/claude-settings.json:ro" \
         $SSH_HOST_KEY_MOUNT \
+        $SSH_OUT_MOUNT \
         --network "$NETWORK_MODE" \
         $PORT_MAPPING \
         $CAP_DROP \

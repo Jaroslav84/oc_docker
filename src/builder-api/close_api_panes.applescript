@@ -24,8 +24,17 @@ on run argv
     if (count of argv) < 2 then return "need <port> <project-dir>"
     set portStr to item 1 of argv
     set projectDir to item 2 of argv
-    set dbg to ((count of argv) >= 3 and item 3 of argv is "debug")
-    set logTxt to ""
+    -- 3rd arg (optional): the CALLER's tty (the cld/ocd pane). When given, we
+    -- close every OTHER session in the api pane's tab — the whole right column
+    -- (status/api/verbose) — and spare only the caller. Far more reliable than
+    -- matching each pane by tty/name, which drift.
+    set keepTty to ""
+    if (count of argv) >= 3 and item 3 of argv is not "debug" then set keepTty to item 3 of argv
+    set dbg to false
+    repeat with _a in argv
+        if (_a as text) is "debug" then set dbg to true
+    end repeat
+    set logTxt to "keepTty=" & keepTty & linefeed
 
     -- 1) Resolve the daemon's tty from its port (shell work outside any tell).
     set apiTty to ""
@@ -64,13 +73,27 @@ on run argv
                         try
                             if apiTty is not "" and (tty of s) is apiTty then set hasApi to true
                             if (name of s) is sessTitle then set hasApi to true
+                            if keepTty is not "" and (tty of s) is keepTty then set hasApi to true
                         end try
                     end repeat
                     if hasApi then
                         repeat with s in sessions of tb
                             try
                                 set stt to tty of s
-                                if (apiTty is not "" and stt is apiTty) or ((name of s) is sessTitle) or (my listHas(statusTtys, stt)) then
+                                set isVictim to false
+                                if keepTty is not "" then
+                                    -- Close the whole right column: EVERY session
+                                    -- in the api pane's tab except the caller's own
+                                    -- (keepTty). No per-pane tty/name matching that
+                                    -- can drift — this is the reliable path.
+                                    if stt is not keepTty then set isVictim to true
+                                else
+                                    -- Legacy fallback (no caller tty): match by
+                                    -- daemon tty / title / cld-status|verbose names
+                                    -- / pgrep'd ttys.
+                                    if (apiTty is not "" and stt is apiTty) or ((name of s) is sessTitle) or ((name of s) is "cld-status") or ((name of s) is "verbose") or (my listHas(statusTtys, stt)) then set isVictim to true
+                                end if
+                                if isVictim then
                                     set end of victims to s
                                     set end of victimTtys to stt
                                 end if
