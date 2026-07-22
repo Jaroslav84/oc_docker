@@ -88,7 +88,7 @@ Big Builder-API panel + safety release: a new live "verbose" console, a full ywi
 - [TWEAK] Tighter header — single-row box, flush-left, dropped the redundant "jobs" label (every column counts on a narrow pane).
 - [BUG] Panes clear screen + scrollback on start, so leftover intro-animation / prompt junk no longer shows above the banner.
 - [BUG] Verbose pane no longer gets stuck in a `ConnectionRefused` reconnect loop — it's now launched pointed at the daemon's actual `127.0.0.1` + resolved port instead of a stale env value.
-- 
+
 ## cld & ocd
 - [NEW] **Outbound SSH** — drop a key + config in `~/.llm-docker/ssh-out/` and every container can `ssh` out (e.g. into a LAN box) passwordlessly; installed into `~/.ssh` with correct perms at container start.
 - [NEW] The **main pane's iTerm tab is tinted with the project's colour** (same hue cld-status uses) on every launch — projects are colour-coded automatically, even without `-a`.

@@ -58,7 +58,9 @@ RUN RUNZSH=no CHSH=no KEEP_ZSHRC=yes sh -c \
     && git clone --depth=1 https://github.com/romkatv/powerlevel10k \
         "$ZSH/custom/themes/powerlevel10k"
 
-# Baseline .zshrc — loads omz + fzf keybindings.
+# Baseline .zshrc — loads omz + fzf keybindings. Sources ~/.p10k.zsh (baked
+# default below) so p10k never fires its "does this look like a diamond?"
+# configuration wizard on fresh containers or SSH logins.
 RUN printf '%s\n' \
         'export ZSH="$HOME/.oh-my-zsh"' \
         'ZSH_THEME="powerlevel10k/powerlevel10k"' \
@@ -69,7 +71,15 @@ RUN printf '%s\n' \
         '[ -f /usr/share/doc/fzf/examples/key-bindings.zsh ] && source /usr/share/doc/fzf/examples/key-bindings.zsh' \
         '[ -f /usr/share/doc/fzf/examples/completion.zsh ] && source /usr/share/doc/fzf/examples/completion.zsh' \
         '' \
+        '# p10k config (host mount at /root/.p10k.zsh wins; falls back to baked default)' \
+        '[[ -f "$HOME/.p10k.zsh" ]] && source "$HOME/.p10k.zsh"' \
+        '' \
         > /root/.zshrc
+
+# Bake p10k's shipped "lean" example as the default ~/.p10k.zsh so SSH logins
+# and fresh containers get a working prompt without the setup wizard. Users
+# who bind-mount their own ~/.p10k.zsh from the host override this.
+RUN cp "$ZSH/custom/themes/powerlevel10k/config/p10k-lean.zsh" /root/.p10k.zsh
 
 # Make zsh the login shell for root (SSH logins + EXIT_TO_DOCKER drop).
 RUN chsh -s /usr/bin/zsh root
