@@ -1,3 +1,81 @@
+# v3.0.4 (2026-07-22)
+
+Vault-aware install: the installer, health check, and SSH smoke test all wrap themselves through your KeePassXC vault when you opt in, so every secret prompt pre-fills automatically.
+
+## Health check
+- [NEW] Post-install health check and SSH smoke test also auto-wrap through env-gorilla in vault mode, and pass every non-blocklisted shell env var (not just `.env`) into the throwaway smoke container. Vault-stored authorized keys + host keys finally reach the smoke sshd, so the end-to-end SSH check actually passes in vault mode.
+
+## SSH
+- [NEW] Added a way to store all SSH keys using an in-container SSH agent instead of writing keys to disk (insecure).
+- [NEW] Container's SSH config now lives inside your KeePassXC vault as a plain-text file. (Private keys still ride as base64 in .env fallback mode — vault users can move them to attachments too later.)
+- [CHANGE] Server host keys stay stable across restarts (no more "host key changed" warnings on your Mac).
+- [CHANGE] Dropped the plaintext `ssh-out` folder on disk — nothing to leak if your host is ever compromised.
+- [CHANGE] Container now WARNs loudly at startup when SSH keys are loaded but no `~/.ssh/config` source is present. Was silent — you'd debug for an hour wondering why `ssh myserver` fell back to defaults.
+- [BUG] Vault users no longer get spuriously prompted to regenerate the outbound `llmdocker` key on every install (installer can't peek into the vault, so it trusts you already have the key). Set `FORCE_REGEN=1` to override.
+- [BUG] The `base64 -i` flag was macOS-only — swapped for portable `base64 <` so the installer runs on Linux dev boxes too.
+
+## Setup & Install
+- [NEW] SSH setup is now two independently-optional sections: inbound (your Mac → container) and outbound (container → your servers). Enable neither, either, or both.
+- [NEW] Outbound setup can generate a fresh `llmdocker` key for you, seed a starter SSH config, and optionally set up a fresh remote server with one prompt.
+- [NEW] Installer detects if s3c-gorilla is missing and offers to install it — or falls back to a plain `.env` file if you skip.
+- [NEW] Server host keys are generated for you on first install so the container's SSH fingerprint never changes.
+- [NEW] End-of-install paste block now MASKS every secret in the terminal (`abc*******123`) and asks before copying the real creds to your clipboard. Prevents accidental leaks in screen recordings, shoulder-surfers, or wrong-pane pastes.
+- [NEW] `.env` is now `chmod 600` on every write (seed + edit). Post-install audit warns loudly if the mode ever drifts.
+- [NEW] Running `cld -a` in a project with no matching config block no longer errors — you get one INFO line, no scary "CONFIG ERROR" in the panel, and the container still launches normally.
+- [NEW] Installer auto-wraps itself through env-gorilla after you say YES to vault mode — every subsequent prompt (API keys, SSHD host keys, Builder API password, Codeman password) pre-fills straight from your vault. Say NO and it stays plain `.env`.
+- [NEW] Every secret prompt now shows its source: `Anthropic API Key (from env-gorilla vault — Enter to keep)` or `(from .env — Enter to keep)` — with a masked preview. Press Enter to keep, type to override.
+- [NEW] SSHD host keys are auto-detected: if they already exist in your vault (or `.env`), the installer skips the "Generate persistent host keys?" prompt entirely. `FORCE_REGEN=1` forces regen when you want fresh ones.
+
+## Security
+- [NEW] Every secret env var was renamed to defeat malware that scans for the obvious words like `KEY`, `TOKEN`, `PASSWORD`, `SSH`. Rename map at the top of `.env.example`.
+- [NEW] New remote-server helper creates the `llmdocker` user with almost-full sudo — install anything, restart services, edit anything EXCEPT root itself (can't delete root, can't `su` to root, can't touch root's password or home).
+- [NEW] Remote-server helper now runs 3 canary tests after installing sudoers — verifies `rm /root`, `passwd root`, `su -` are actually denied (not just that the sudoers file parses). Records start + end in syslog for audit (`journalctl -t llmdocker-provision`).
+- [NEW] Pre-commit git hook blocks accidental commits that add private-project names to public files. Path whitelist (`docs/`, `plans/`, `memory/`, `CLAUDE.md`) and per-file opt-out marker keep example-docs unblocked. `git commit --no-verify` bypasses when intentional.
+- [TWEAK] Provisioner docs + `--help` now say honestly: `llmdocker` IS root; the block-list is a typo-guard against fat-fingers, NOT a security boundary. Only run this on servers you fully control.
+- [TWEAK] `rm-guard` "trash-cli missing" warning now fires once per container instead of on every shell — quieter log output when the image drifts.
+
+## Config templates
+- [NEW] Two starter project shards to copy-and-rename when onboarding a new project — one Python-heavy (FastAPI + Django + Vite + Swift), one PHP-heavy (docker-compose + Angular + PHPUnit).
+
+## Builder API panel
+- [TWEAK] Event tail auto-shrinks to fit small panes (`min(5, rows - header)`) — no more banner clipping on short terminals. Grows back to 5 slots on tall ones.
+
+### Dev logs
+- [CHANGE] Bulk env-var rename across 22 files via targeted `sed`. Two names (`_4NTHR0P1C_H4NDLE`, `_0P3N4I_H4NDLE`) got a leading `_` because bash refuses variable names starting with a digit.
+- [NEW] `src/install.d/06b-ssh-outbound.sh` — outbound key gen + starter ssh_config template + optional provisioner loop.
+- [CHANGE] `src/docker/docker-entrypoint.sh` — replaced the old `~/.ssh-out` file-copy loop with the ssh-agent + `ssh-add -` block; priority check for `$S3C_ATTACHMENT_DIR/config` over `$LLM_D0CKER_SHH_CFG_B64`.
+- [CHANGE] `src/docker/setup-ssh.sh` — decodes host keys from vault env vars into `/etc/ssh/keys/` with a loud fallback to `ssh-keygen` if the vault is empty.
+- [CHANGE] `src/cld.run.sh` + `src/ocd.run.sh` — removed `SSH_HOST_KEY_MOUNT` and `SSH_OUT_MOUNT` docker-run flags; keys come from env only.
+- [NEW] `src/install.d/03-env.sh` — probes `command -v env-gorilla`, offers install or `.env` fallback.
+- [NEW] `src/tools/provision-llmdocker.sh` + `src/tools/README.md`.
+- [NEW] Full CI safety net added: `check-install-dry` (source-tests every install step under stubs), `check-launcher-softskip` (10 unit tests for the project-block probe), `check-py-tests` (9 pytest units for builder-api config/jobs/security), `check-safe-delete` (5 tests for the shared trash helper), `check-todos` (advisory TODO tracker). 9 CI scripts total, all wired into the existing runner.
+- [NEW] Shared setup helpers extracted: `src/setup/{safe_delete,mask,clipboard}.sh` — used across install.d + 99-complete for cross-platform deletes, secret masking, and clipboard writes.
+- [NEW] `scripts/git-hooks/pre-commit_private-terms.sh` + `scripts/tools/install-git-hooks.sh` — idempotent installer that symlinks project hooks into `.git/hooks/`, refuses to clobber foreign symlinks.
+- [CHANGE] `_project_shard_lookup` helper in `src/setup/launcher.sh` — consolidates the two config-shard walks (soft-skip + port lookup), handles bare + quoted TOML block headers, escapes regex metacharacters so dotted project names match literally.
+- [CHANGE] s3c-gorilla curl-pipe URL extracted to `_S3C_GORILLA_REF` variable — one-line update when the repo tags a release (tagged `TODO(s3c-gorilla-tag)` for grouped visibility).
+- [BUG] macOS `stat -f '%A'` returns full mode like `100600`, not `600` — swapped to `stat -f '%OLp'` so the `.env` mode audit matches correctly on Mac hosts.
+- [CHANGE] Provisioner `logger` calls swapped from `auth.info` to `daemon.info` — reaches more distros' default syslog config. Canary block skips cleanly when `sudo -l -U` is unsupported (busybox).
+- [NEW] `src/setup/prefill.sh` — shared `_prefill_key` helper: vault (when active) > `.env` > shell-env fallback. Wired into 4 prompt sites (`05-apikeys`, `06a-ssh-inbound` host keys, `07-builderapi`, `08-tmux` codeman).
+- [CHANGE] `smoke_test.sh` copies `cld.run.sh`'s `EXTRA_ENV` pattern — iterates over `env`, passes every non-blocklisted var via `-e VAR` to `docker run`, so vault-injected values flow through to the ephemeral container.
+
+# v3.0.2 (2026-07-19)
+
+## Hooks
+- [NEW] YOLO Stop-hook: if a plan file with `mode: yolo` still has unchecked `- [ ]` boxes, Claude can't stop — reminds it to keep ticking.
+
+## Builder API panel
+- [TWEAK] 3-pane layout row heights rebalanced — middle api pane gets 50%, status + verbose split the rest evenly (~25% each).
+- [BUG] Event tail was scrolling forever — now pinned to the last 5 lines at the bottom, redrawn in place.
+- [BUG] Jobs list wrap alignment — 2nd row of jobs used to sit one column left of the first row.
+- [TWEAK] Verbose console + status pane title bars switched to the ywizz purple accent (were blue / pink).
+- [BUG] Verbose console no longer spams `GET /logs 400` — its own startup discovery probe is silenced.
+- [NEW] `syntax` job family — own purple color + emoji so it stands apart from python / lint.
+
+### Dev logs
+- [NEW] `banner.py`: fixed 5-slot event tail via cursor-up + clear-to-end; `reset_event_tail()` called from WINCH and config-reload so the ring restarts under the fresh banner.
+- [TWEAK] `builder_api.applescript`: rebalance sets `rows` only on the middle pane; iTerm splits the remainder evenly instead of thirds.
+- [TWEAK] `banner._render_jobs`: continuation-row indent uses `3 + label_w` (accounts for the 2-cell emoji width).
+
 # v3.0.1 (2026-07-07)
 
 Big Builder-API panel + safety release: a new live "verbose" console, a full ywizz visual pass on the panels, outbound SSH from the cage, deletion + mount guards so an agent can't wipe your work, and a large internal file-split backed by CI guards.
@@ -133,7 +211,7 @@ Generic commands across every project, per-project settings, and a live status p
 - [CHANGE] `src/cld` + `src/ocd` port resolution reads `~/.llm-docker/api_config/<name>.toml` first, base second, `BUILDER_API_PORT` env third, default 6666 last. Both probe `lsof -ti :$port` before spawning and skip cleanly if anything is bound.
 - [CHANGE] `src/ocd` ported `flock`-based Docker-launch serialization from `src/cld`. Shared lock at `/tmp/cld-docker-start.lock`.
 - [CHANGE] `src/builder-api/builder_api.applescript` — split path snapshots the outer iTerm window bounds, applies `set columns to winCols`, then restores bounds. `winCols` cut to 40. `clear;` removed from the typed cmd.
-- [CHANGE] Repo layout: `api_config/builder-api.toml` (base) + `api_config/{llm-docker,project_x}.toml` (shards). The legacy `projects/` directory and root-level `builder-api.toml` are gone.
+- [CHANGE] Repo layout: `api_config/builder-api.toml` (base) + `api_config/{llm-docker,project_python}.toml` (shards). The legacy `projects/` directory and root-level `builder-api.toml` are gone.
 - [TWEAK] CLAUDE.md gains a "No auto daemon restart in examples" rule: install commands never chain `&& cld -c -a`. Yaro picks the restart timing himself across multiple terminals.
 - [TWEAK] Banner subtitle rebranded "Builder API" → "LLM-docker API". Internal env vars + Python identifiers + paths under `src/builder-api/` keep their names for back-compat.
 

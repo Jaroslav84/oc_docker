@@ -67,6 +67,7 @@ Specifically NEVER bullet:
 - **`.Trash-*` shuffling** — moves don't equal changes.
 - **`.gitignore` micro-tweaks** — too small to matter, unless they intentionally relax/tighten what's committed in a way users notice.
 - **Refactors that don't change behavior** — go in dev logs ONLY if they materially affect future contributors. Most don't; skip.
+- **Private project names.** `llm-docker` is a PUBLIC repo. NEVER mention private project names (`slav-ai`, `purpletech`, `slav-it.com`, `lounge`, etc.), their job keys, or their sub-project paths — in `CHANGELOG.md` OR in commit messages. Describe the change generically ("Tor-safe Vite build job", "npm reinstall job") or skip the bullet entirely. Better to omit than to leak.
 
 If a session's entire output is in those categories → reply "nothing changelog-worthy in this batch" and STOP. Don't manufacture bullets to fill the entry.
 
@@ -87,7 +88,7 @@ If a session's entire output is in those categories → reply "nothing changelog
 4. **Plain-English bullets, tagged.** User-facing sections never mention file paths or function names; dev logs can.
 5. **Print the changelog in chat**, wrapped in a `markdown` code fence:
    - **NEW MODE**: print the whole new top entry (heading + intro + sections + dev logs).
-   - **APPEND MODE**: print ONLY the new bullets, grouped under their target section names. Mark sections as `## Builder API — visuals (existing)` or `## New section name (new)` so the user can see at a glance what's being added vs. extended.
+   - **APPEND MODE**: print ONLY the new bullets, grouped under their target section names. NEVER append `(new)`, `(existing)`, or any similar marker to a `## Section` heading — headings are clean text, always. Section names alone tell the story.
 6. **Ask the user**: "Apply to `CHANGELOG.md`? [yes / no / edit]"
    - `yes`:
      - **NEW MODE** → prepend the new entry to `CHANGELOG.md` (above the current top heading, separated by one blank line).
@@ -116,9 +117,10 @@ If a session's entire output is in those categories → reply "nothing changelog
 
 ## Tone reminders
 
+- **READ THE LAST 2-3 CHANGELOG ENTRIES FIRST — every time. Mimic their style.** Section naming, bullet length, tag distribution, phrasing rhythm all come from that file, not from the abstract rules above. Rules are the floor; the existing entries are the ceiling. If your bullet doesn't sound like Yaro wrote the previous entry, rewrite it.
 - Short. Sales reader for user-facing sections. No code paths in user-facing sections — only in `### Dev logs`.
 - If a release is tiny (one bugfix), one section + one bullet is fine.
 - If you can't infer what a diff means, say so honestly instead of guessing. Better to ask "what changed in `src/x/y.py`?" than invent a bullet.
-- The CHANGELOG.md file is the source of truth for tone — when uncertain about section naming or bullet phrasing, read the most recent 2-3 entries and match their style.
+- NEVER decorate `## Section` headings with `(new)`, `(existing)`, or any other marker. Headings are clean text — always.
 
 After the entry is printed (and written, if approved), follow up with the standard reporting footer per `CLAUDE.md` (Request / Done / Success / Concerns / Optimizations / Hacks / Next steps).

@@ -51,11 +51,8 @@ Thumbs.db
 *.orig
 
 # Private agent notes / scratch
-.agents/
-AGENTS.md
-
-# Quake reference implementation — never committed, wherever it ends up in the tree.
-quake_api/
+.claude/
+CLAUDE.md
 
 # Private user slash commands (carry private project refs)
 .claude/commands/SHAKETREE.md

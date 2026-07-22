@@ -46,6 +46,20 @@ def _term_cols(default: int = 80) -> int:
         return default
 
 
+def _term_lines(default: int = 24) -> int:
+    """Best-effort terminal height. Reads stderr's tty; falls back to
+    $LINES, then to `default`. Never raises."""
+    for fd in (sys.stderr, sys.stdout):
+        try:
+            return os.get_terminal_size(fd.fileno()).lines
+        except (OSError, AttributeError, ValueError):
+            continue
+    try:
+        return int(os.environ.get("LINES", default))
+    except ValueError:
+        return default
+
+
 def _visible_len(s: str) -> int:
     return len(_ANSI_RE.sub("", s))
 
@@ -188,6 +202,9 @@ _PREFIX_FAMILY = {
     "deploy":   ("deploy",  C8),
     "envoy":    ("deploy",  C8),
     "fab":      ("deploy",  C8),
+    # Syntax checkers — own family, purple so it's visually distinct
+    # from python (C5) and lint (C3) which sit adjacent in the list.
+    "syntax":   ("syntax",  C7),
 }
 
 
@@ -239,7 +256,10 @@ def _render_jobs(names, cols: int) -> str:
             need = len(j) + len(sep)
             if line and width_used + need > avail:
                 out.append(f"{indent}{label}  {line.rstrip()}\n")
-                label = f"{' ' * (len(fam) + 2)}{' ' * (label_w - len(fam))}"
+                # Continuation label = emoji(2 cells) + space(1) + label_w.
+                # Prior version omitted the emoji-cell so wraps landed one
+                # column left of the first row's job list — this aligns them.
+                label = " " * (3 + label_w)
                 line = ""
                 width_used = 0
             line += piece + sep
@@ -282,7 +302,7 @@ def show_banner(name: str, bind: str, port: int, jobs_names) -> None:
 
     sys.stderr.write(
         title_bar(f"BUILDER-API · {name}", "177")
-        + "\n" + "".join(art) + "\n" + _frame(status, C7)
+        + "\n" + "".join(art) + _frame(status, C7)
     )
 
     if names:
@@ -352,9 +372,33 @@ def format_event_row(hms: str, color: str, glyph: str, typ: str, msg: str,
     )
 
 
+# Terminal-height-aware event tail. Cap at 5 slots on a normal 24+ row
+# terminal; shrinks to fit when the pane is smaller (guarantees at least 1
+# slot). Redraws in place via ANSI cursor-up + clear-to-end each event.
+_EVENT_MAX_CAP = 5
+# Rows reserved for the banner header above the event tail. Conservative
+# estimate — the actual header height varies with pane state (jobs list wrap).
+_HEADER_LINES = 10
+_recent_events: list[str] = []
+_prev_rendered = 0
+
+
+def _event_max() -> int:
+    """Cap the event ring to what fits under the header. Recomputed on
+    every event so terminal resize is picked up without a SIGWINCH handler."""
+    return max(1, min(_EVENT_MAX_CAP, _term_lines() - _HEADER_LINES))
+
+
+def reset_event_tail() -> None:
+    """Called by banner reprint / WINCH so the next event starts a fresh
+    5-line region below the banner instead of chasing a stale cursor."""
+    global _prev_rendered
+    _prev_rendered = 0
+
+
 def event_line(record: dict) -> None:
-    """EventStore subscriber. Always single-line; message gets truncated
-    rather than wrapped so the tail stays scannable."""
+    """EventStore subscriber. Keeps only the last 5 events on screen —
+    each new event redraws the same 5-line region in place."""
     typ = record.get("type", "?")
     # http_call is per-request traffic for the verbose console (cld-verbose),
     # NOT the api pane's state tail — skip it here or the tail floods.
@@ -379,7 +423,20 @@ def event_line(record: dict) -> None:
     else:
         color, glyph = _SYS_STYLE.get(typ, (GREY, "•"))
         msg_color = GREY
-    sys.stderr.write(format_event_row(hms, color, glyph, subject, msg, msg_color))
+    row = format_event_row(hms, color, glyph, subject, msg, msg_color)
+
+    global _prev_rendered
+    _recent_events.append(row)
+    _max = _event_max()
+    while len(_recent_events) > _max:
+        _recent_events.pop(0)
+    # ANSI: move cursor up `_prev_rendered` lines then clear from cursor to
+    # end of screen. The whole 5-line region is rewritten every time.
+    if _prev_rendered > 0:
+        sys.stderr.write(f"\033[{_prev_rendered}A\033[J")
+    for r in _recent_events:
+        sys.stderr.write(r)
+    _prev_rendered = len(_recent_events)
     sys.stderr.flush()
 
 

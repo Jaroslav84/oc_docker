@@ -105,6 +105,11 @@ def main() -> int:
             _banner.show_banner(
                 cfg.name, cfg.bind, cfg.port, list(cfg.jobs.keys())
             )
+            # Fixed 5-slot event tail: clear the ring + cursor-tracking so
+            # the next event_line starts a fresh region below the reprinted
+            # banner (otherwise it would cursor-up into the banner).
+            _banner._recent_events.clear()
+            _banner.reset_event_tail()
             try:
                 recent = app.events.query(n=40)
                 for ev in recent.get("events") or []:

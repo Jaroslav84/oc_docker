@@ -157,6 +157,7 @@ setup_env() {
     if [ ! -f "$SCRIPT_DIR/.env" ]; then
         _log SETUP "Creating .env from template..."
         cp "$SCRIPT_DIR/.env.example" "$SCRIPT_DIR/.env"
+        chmod 600 "$SCRIPT_DIR/.env" 2>/dev/null || true
         _log SETUP "Edit $SCRIPT_DIR/.env to add your API keys"
     fi
 }

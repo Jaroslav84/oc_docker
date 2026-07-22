@@ -230,7 +230,7 @@ _count_total_packages() {
             total=$(( total + c ))
         done
         # openssh-server (1) when SSH on; tmux (1) when any tmux-helper flag on.
-        [ "$(_read_env_var LLM_DOCKER_SSH_ENABLED "$conf")" = "true" ] && total=$(( total + 1 ))
+        [ "$(_read_env_var LLM_D0CKER_SHH_EN4BLED "$conf")" = "true" ] && total=$(( total + 1 ))
         local f any_tmux=false
         for f in INSTALL_TMUX_VANILLA INSTALL_TMUX_TEAM INSTALL_TMUX_RECON INSTALL_TMUX_CODEMAN INSTALL_TMUX_CLAUDE; do
             [ "$(_read_env_var "$f" "$conf")" = "true" ] && any_tmux=true

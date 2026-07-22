@@ -11,6 +11,16 @@
 set -u
 SCRIPT_DIR="$( cd "$( dirname "$( realpath "${BASH_SOURCE[0]}" )" )" && pwd )"
 
+# Vault re-exec: if vault mode is on in llm-docker.conf AND env-gorilla is
+# available AND we aren't already wrapped, restart via env-gorilla so vault-
+# stored SSH vars land in the shell env (later passed to docker via -e).
+if [ -z "${LLM_DOCKER_ENV_GORILLA:-}" ] \
+   && command -v env-gorilla >/dev/null 2>&1 \
+   && grep -q '^IS_S3C_GORILLA_ENABLED=true' "$SCRIPT_DIR/llm-docker.conf" 2>/dev/null; then
+    export LLM_DOCKER_ENV_GORILLA=1
+    exec env-gorilla llm-docker -- bash "$0" "$@"
+fi
+
 RESET=$'\033[0m'; DIM=$'\033[2m'; BOLD=$'\033[1m'
 GREEN=$'\033[32m'; RED=$'\033[31m'; YELLOW=$'\033[33m'
 PURPLE=$'\033[38;5;177m'
@@ -30,7 +40,7 @@ if ! docker image inspect llm-docker:latest >/dev/null 2>&1; then
 fi
 
 _read_conf() { grep "^$1=" "$SCRIPT_DIR/llm-docker.conf" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'"; }
-SSH_ENABLED=$(_read_conf LLM_DOCKER_SSH_ENABLED)
+SSH_ENABLED=$(_read_conf LLM_D0CKER_SHH_EN4BLED)
 SSH_PORT=$(_read_conf LLM_DOCKER_SSH_PORT)
 SSH_HOST_PORT=$(_read_conf LLM_DOCKER_SSH_HOST_PORT)
 : "${SSH_PORT:=22}"
@@ -73,6 +83,26 @@ trap cleanup EXIT INT TERM
 # or opencode — just run setup-ssh.sh and idle long enough for the probe.
 # Mounts mirror cld's SSH setup: authorized_keys comes from env-file, host keys
 # from ~/.llm-docker/ssh to keep fingerprints stable.
+#
+# In vault mode, install.sh is re-execed through env-gorilla so LLM_D0CKER_SHH_*
+# vars live in the shell env rather than .env. Pass all non-blocklisted env
+# vars via `-e VAR` so vault values reach the container (mirrors cld/ocd).
+EXTRA_ENV=""
+_ENV_BLOCK='^(PATH|HOME|TMPDIR|PWD|OLDPWD|SHELL|USER|LOGNAME|HOSTNAME|SHLVL|LD_.+|DYLD_.+|LLM_DOCKER_ENV_GORILLA)$'
+while IFS='=' read -r _ename _; do
+    [ -z "$_ename" ] && continue
+    [[ "$_ename" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+    [[ "$_ename" =~ $_ENV_BLOCK ]] && continue
+    EXTRA_ENV="$EXTRA_ENV -e $_ename"
+done < <(env)
+unset _ename _ENV_BLOCK
+
+# Diagnostic — where does the authorized-keys var live?
+_AUTH_LEN=${#LLM_D0CKER_SHH_4UTH_PBLKZ}
+_ENV_HAS=$(grep -c '^LLM_D0CKER_SHH_4UTH_PBLKZ=' "$SCRIPT_DIR/.env" 2>/dev/null || echo 0)
+_info "auth-keys sources: shell=${_AUTH_LEN}chars  .env=${_ENV_HAS}line(s)"
+unset _AUTH_LEN _ENV_HAS
+
 docker run -d --rm \
     --name "$CNAME" \
     --hostname llm-docker-smoke \
@@ -80,6 +110,7 @@ docker run -d --rm \
     -p "${TEST_HOST_PORT}:${SSH_PORT}" \
     --env-file "$SCRIPT_DIR/llm-docker.conf" \
     --env-file "$SCRIPT_DIR/.env" \
+    $EXTRA_ENV \
     -v "$HOME/.llm-docker/ssh:/etc/ssh/keys" \
     --entrypoint bash \
     llm-docker:latest -c '/setup-ssh.sh && sleep 60' >/dev/null || {

@@ -9,7 +9,7 @@ for `docker-entrypoint.sh`) and import it from Claude Code / OpenCode:
 Defaults read from env vars the cld / ocd wrappers already forward:
     BUILDER_API_HOST      (host.docker.internal)
     BUILDER_API_PORT      (6666)
-    BUILDER_API_PASSWORD  (matches what the daemon expects)
+    BUILDER_API_P4SS  (matches what the daemon expects)
 
 The helper wraps the long-poll pattern (`?wait=N` + `timed_out`) so callers
 don't have to sleep-loop; `wait_build()` blocks up to `max_total_wait_s` and
@@ -30,7 +30,7 @@ from typing import Any, Optional
 
 DEFAULT_HOST = os.environ.get("BUILDER_API_HOST", "host.docker.internal")
 DEFAULT_PORT = int(os.environ.get("BUILDER_API_PORT", "6666") or 6666)
-DEFAULT_PASSWORD = os.environ.get("BUILDER_API_PASSWORD", "") or None
+DEFAULT_PASSWORD = os.environ.get("BUILDER_API_P4SS", "") or None
 DEFAULT_AGENT_ID = os.environ.get("BUILDER_AGENT_ID", "") or None
 
 

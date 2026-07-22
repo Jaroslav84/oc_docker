@@ -48,6 +48,10 @@ if [ -z "${LLM_DOCKER_ENV_GORILLA:-}" ] \
     done
     [ -z "$_proj_dir" ] && _proj_dir="$(pwd)"
     _proj_name="$(basename "$_proj_dir")"
+    # Strip leading dot — dot-dirs are hidden/config, not projects. Fixes
+    # `cld` run from ~/.llm-docker loading both `llm-docker` and `.llm-docker`
+    # profiles and env-gorilla warning about the missing second one.
+    _proj_name="${_proj_name#.}"
     unset _proj_dir _a
 
     if [ -n "$_proj_name" ] && [ "$_proj_name" != "llm-docker" ]; then
@@ -59,7 +63,7 @@ if [ -z "${LLM_DOCKER_ENV_GORILLA:-}" ] \
         env-gorilla --clear "$_profiles" >/dev/null 2>&1 || true
     fi
     export LLM_DOCKER_ENV_GORILLA=1
-    exec env-gorilla "$_profiles" -- "$0" "$@"
+    exec env-gorilla "$_profiles" -- bash "$0" "$@"
 fi
 
 # Opted into the vault but env-gorilla isn't installed: fall back quietly to

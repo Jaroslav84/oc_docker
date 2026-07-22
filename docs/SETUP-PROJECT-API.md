@@ -36,15 +36,17 @@ Seed the base file from the template (skip if it already exists):
 
 ```
 mkdir -p ~/.llm-docker/api_config
-cp ~/Projects/llm-docker/src/builder-api/builder-api.host.toml.example \
+cp ~/Projects/llm-docker/src/builder-api/api_config/builder-api.toml \
    ~/.llm-docker/api_config/builder-api.toml
 ```
 
 Set the shared password once, in llm-docker's **own** `.env` (the container can
-read this; if you don't trust that, use s3c-gorilla — see §5):
+read this; if you don't trust that, use s3c-gorilla — see §5). Note: env vars
+are leet-renamed to defeat malware that greps for `KEY / TOKEN / PASSWORD`.
+Full rename map at the top of `src/.env.example`:
 
 ```
-echo "BUILDER_API_PASSWORD=$(openssl rand -hex 16)" >> ~/Projects/llm-docker/src/.env
+echo "BUILDER_API_P4SS=$(openssl rand -hex 16)" >> ~/Projects/llm-docker/src/.env
 ```
 
 > ⚠️ Treat `~/.llm-docker/api_config/builder-api.toml` like `sudoers`. Every job
@@ -84,6 +86,31 @@ description = "Deploy myapp"
 - For a binary inside the repo (`vendor/bin/...`), pin it with `command_hash`
   or point at a host path; a hostile agent could otherwise swap the file.
 
+**Recommended shard layout** (once you have more than ~10 jobs — keeps the file
+scannable when Claude/OpenCode has to reason about it):
+
+```
+1.  header comment           project purpose + which services are launchd/brew/docker
+2.  [project.<name>]         header block (root, port, languages, description)
+3.  GENERIC VERBS section    up / down / restart / build / lint / test / logs /
+                             status / deploy — all platform-based
+4.  NAMED JOBS section       grouped by domain, in this order:
+    - services               env-seed, launchd wrappers
+    - apps                   per-app groups (each: install → up → down → restart →
+                             status → tail → build → test → variants)
+    - dev tools              smoke, lint variants, format, preview, e2e, mypy
+    - package management     npm, pip, other package managers
+    - escape hatch           the regulated `sa`-style passthrough (if any)
+    - data                   postgres, db utilities, migrations
+    - extras                 xcode schemes, one-offs
+```
+
+Reference examples in the repo:
+- `src/builder-api/api_config/project_python.toml` — Python-heavy (FastAPI + Django + Vite + Swift), launchd services, brew redis, pytest / e2e / mypy dev tools
+- `src/builder-api/api_config/project_php.toml` — PHP-heavy (Lumen + Slim in docker-compose), Angular workspace, iOS + Objective-C library, Envoy-based deploys, allowlist compose-exec pattern
+
+Both follow the layout above and are safe to copy-and-rename as your starting point.
+
 Save it — the daemon **hot-reloads** within ~2s; new jobs apply on next enqueue.
 
 ---
@@ -99,7 +126,7 @@ You should see the builder-api panel come up on `myapp`'s port and the
 cld-status dashboard. Quick check that jobs resolved:
 
 ```
-curl -s -H "X-Builder-API-Password: $BUILDER_API_PASSWORD" \
+curl -s -H "X-Builder-API-Password: $BUILDER_API_P4SS" \
   http://127.0.0.1:6701/jobs | python3 -m json.tool | head
 ```
 
@@ -114,13 +141,15 @@ are left alone.
 
 ## 4. Keep the repo mirror in sync (optional)
 
-llm-docker tracks a copy of these configs under `api_config/` for versioning.
+llm-docker tracks a copy of these configs under `src/builder-api/api_config/` for versioning.
 After editing the live host config, back it up (or deploy a tracked one):
 
 ```
-cp -f ~/.llm-docker/api_config/*.toml ~/Projects/llm-docker/api_config/   # host → repo
-cp -f ~/Projects/llm-docker/api_config/*.toml ~/.llm-docker/api_config/   # repo → host
+cp -f ~/.llm-docker/api_config/*.toml ~/Projects/llm-docker/src/builder-api/api_config/   # host → repo
+cp -f ~/Projects/llm-docker/src/builder-api/api_config/*.toml ~/.llm-docker/api_config/   # repo → host
 ```
+
+Or use the bundled helper: `src/builder-api/tomlify.sh all` (repo → host).
 
 ---
 
@@ -145,10 +174,12 @@ Hackintosh). See [s3c-gorilla](https://github.com/RussianRoulette84/s3c-gorilla)
 
 3. **Populate the vault** — in KeePassXC, create an entry titled **`llm-docker`**,
    then Advanced → Attachments → add a file named **`.env`** containing your
-   secrets:
+   secrets. Use the leet-renamed names (see `src/.env.example` for the full
+   rename map):
    ```
-   ANTHROPIC_API_KEY=...
-   BUILDER_API_PASSWORD=...
+   _4NTHR0P1C_H4NDLE=...          # was ANTHROPIC_API_KEY
+   BUILDER_API_P4SS=...           # was BUILDER_API_PASSWORD
+   G1TL4B_LLMD0CKER_TEKKEN=...    # was GITLAB_LLMDOCKER_TOKEN
    ```
    Per-project secrets go in a second entry titled like the **project folder**
    (`myapp`). env-gorilla merges the `llm-docker` + `<project>` profiles into one
@@ -163,16 +194,35 @@ fall back to `.env` quietly (one dim warning only on a fresh launch with no
 
 ---
 
+## 5b. Optional: outbound SSH — container reaches your servers
+
+The container ships with an in-container ssh-agent. Keys live in agent memory
+only — they're never written to disk. Three ways to set outbound SSH up:
+
+**Path A — vault (recommended if you use s3c-gorilla).**
+- Attach the private keys as base64 env vars on `ENV/llm-docker`: `LLMD0CKER_SHH_3D25519_PVYT_B64`, `PS4_SHH_3D25519_PVYT_B64`.
+- Attach the ssh config as a real file to `SSH/llm-docker-ssh-config` (a plain text attachment named `config`).
+- env-gorilla drops the config file at `$S3C_ATTACHMENT_DIR/config` on unlock; the container copies it into `/root/.ssh/config` at startup.
+
+**Path B — plain .env (no vault).**
+- Run `install.sh` step **6b** to generate a fresh `llmdocker_ed25519` outbound key and seed a starter `~/.ssh/config` template into `LLM_D0CKER_SHH_CFG_B64`.
+- Edit `.env` afterward to add real host blocks. The container decodes both at startup.
+
+**Remote user provisioning — `src/tools/provision-llmdocker.sh`.**
+- Bootstrap the `llmdocker` user on a fresh server with **full `NOPASSWD` sudo** minus a narrow denylist for root deletion / password change / `su` to root / `rm /root`. Idempotent, works on Debian/Ubuntu, RHEL/Rocky/Alma/Fedora/Amazon, Alpine. See `src/tools/README.md` for usage examples.
+- Step **6b** of `install.sh` offers to run it against a hostname you provide, or you can run it later against any server via a one-line `ssh admin@host bash -s -- --pubkey '<key>' < provision-llmdocker.sh`.
+
+---
+
 ## 6. Troubleshooting
 
 | Symptom | Fix |
 |---|---|
 | `CONFIG ERROR: host config not found` | `cp` the template to `~/.llm-docker/api_config/builder-api.toml` (§1). |
 | `CONFIG ERROR: no [project.<name>]` | Your shard's block name must match the **folder** basename. Add `[project.myapp]`. |
-| `GET /jobs` empty / 401 | Wrong/missing `BUILDER_API_PASSWORD`, or the port doesn't match the shard. |
+| `GET /jobs` empty / 401 | Wrong/missing `BUILDER_API_P4SS`, or the port doesn't match the shard. |
 | Panel opens in a separate window | iTerm not installed/denied AppleScript — install iTerm2 or grant Automation. |
 | Edited config, nothing changed | Job/alias edits hot-reload (~2s). Bind/port/runtime changes need a daemon restart (quit + `cld -a`). |
 
 **Read more:** full API reference in
-[`src/builder-api/README.md`](../src/builder-api/README.md); the mental model +
-security seams in [`docs/00-LLM-DOCKER.md`](00-LLM-DOCKER.md) §7–8.
+[`src/builder-api/README.md`](../src/builder-api/README.md).

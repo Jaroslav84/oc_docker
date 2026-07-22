@@ -1,0 +1,438 @@
+# ──────────────────────────────────────────────────────────────────────
+# project_python — EXAMPLE project shard (Python-heavy)
+# ──────────────────────────────────────────────────────────────────────
+#
+# Copy this file to `~/.llm-docker/api_config/<your-app>.toml`, rename
+# every `project_python` reference to `<your-app>`, then edit paths /
+# ports / plist names to match your real project.
+#
+# What it demonstrates:
+#   - FastAPI + Django + Vite frontend + Swift apps (macOS + iOS)
+#   - launchd-backed long-lived services (uvicorn, django, vite)
+#   - brew-managed redis as a 3rd platform on `up/down/restart`
+#   - Postgres + Django management jobs
+#   - Regex-bounded placeholders for spec / pattern / package names
+#   - `command_hash` pinning for any bash script the daemon invokes
+#   - `mutates_filesystem = true` gating for install / write jobs
+#   - `sa` — a regulated escape hatch for `<myapp> <subcommand>` calls
+#
+# Layout:
+#   [project.project_python]  header
+#   GENERIC VERBS             up / down / restart / build / lint / test /
+#                             logs / status / deploy (platform-based)
+#   NAMED JOBS                per-domain groups (see slav-ai.toml in the
+#                             repo history for the canonical order)
+
+[project.project_python]
+root        = "~/Projects/project_python"
+port        = 6701
+description = "FastAPI api + Django auth + Vite frontend + Swift apps"
+
+
+# ══════════════════════════════════════════════════════════════════════
+# GENERIC VERBS
+# ══════════════════════════════════════════════════════════════════════
+
+# ── up / down / restart — launchd (api, web) + brew (redis) ──────────
+[project.project_python.jobs.up.platforms.api]
+command     = "launchctl"
+args        = ["bootstrap", "gui/501", "/Users/YOU/Library/LaunchAgents/com.example.uvicorn.plist"]
+timeout_s   = 10
+description = "Bootstrap the FastAPI :3001 LaunchAgent"
+
+[project.project_python.jobs.up.platforms.web]
+command     = "launchctl"
+args        = ["bootstrap", "gui/501", "/Users/YOU/Library/LaunchAgents/com.example.vite.plist"]
+timeout_s   = 10
+description = "Bootstrap the Vite :3000 LaunchAgent"
+
+[project.project_python.jobs.up.platforms.redis]
+command     = "brew"
+args        = ["services", "start", "redis"]
+timeout_s   = 15
+description = "Bring redis up alongside the rest of the dev stack"
+
+[project.project_python.jobs.down.platforms.api]
+command     = "launchctl"
+args        = ["bootout", "gui/501/com.example.uvicorn"]
+timeout_s   = 10
+
+[project.project_python.jobs.down.platforms.web]
+command     = "launchctl"
+args        = ["bootout", "gui/501/com.example.vite"]
+timeout_s   = 10
+
+[project.project_python.jobs.down.platforms.redis]
+command     = "brew"
+args        = ["services", "stop", "redis"]
+timeout_s   = 15
+
+[project.project_python.jobs.restart.platforms.api]
+command     = "launchctl"
+args        = ["kickstart", "-k", "gui/501/com.example.uvicorn"]
+timeout_s   = 10
+
+[project.project_python.jobs.restart.platforms.web]
+command     = "launchctl"
+args        = ["kickstart", "-k", "gui/501/com.example.vite"]
+timeout_s   = 10
+
+[project.project_python.jobs.restart.platforms.redis]
+command     = "brew"
+args        = ["services", "restart", "redis"]
+timeout_s   = 15
+
+
+# ── build ─────────────────────────────────────────────────────────────
+[project.project_python.jobs.build.platforms.web]
+command      = "npm"
+args         = ["run", "build"]
+timeout_s    = 180
+kill_after_s = 5
+description  = "Vite frontend build"
+
+[project.project_python.jobs.build.platforms.desktop]
+command      = "xcodebuild"
+args         = ["-project", "src/swift-app/swift-app.xcodeproj", "-scheme", "Example", "-destination", "platform=macOS", "-derivedDataPath", "/tmp/swift-app-dd", "-quiet", "build"]
+timeout_s    = 900
+kill_after_s = 15
+description  = "Build the macOS app"
+
+[project.project_python.jobs.build.platforms.ios]
+command      = "xcodebuild"
+args         = ["-project", "src/swift-app/swift-app.xcodeproj", "-scheme", "Example", "-destination", "generic/platform=iOS Simulator", "-derivedDataPath", "/tmp/swift-app-dd", "-quiet", "build"]
+timeout_s    = 900
+kill_after_s = 15
+description  = "Build the iOS app"
+
+
+# ── lint ──────────────────────────────────────────────────────────────
+[project.project_python.jobs.lint.platforms.api]
+command     = "ruff"
+args        = ["check", "src/"]
+timeout_s   = 60
+description = "Python lint (ruff)"
+
+[project.project_python.jobs.lint.platforms.web]
+command      = "bash"
+args         = ["scripts/ci/lint-fe.sh", "--summary-only", "--no-color"]
+# When invoking a bash script, pin it with command_hash. Fill in the
+# real sha256 with: `shasum -a 256 scripts/ci/lint-fe.sh`.
+command_hash = { path = "scripts/ci/lint-fe.sh", sha256 = "sha256:REPLACE_WITH_REAL_HASH" }
+timeout_s    = 120
+description  = "JS/HTML linter"
+
+
+# ── test ──────────────────────────────────────────────────────────────
+[project.project_python.jobs.test.platforms.api]
+command      = "env"
+args         = ["DJANGO_SETTINGS_MODULE=myapp.config.local", "PYTHONPATH=/Users/YOU/Projects/project_python/src", ".venv/bin/python", "-m", "pytest"]
+timeout_s    = 300
+kill_after_s = 5
+description  = "Run pytest against the project venv"
+
+[project.project_python.jobs.test.platforms.web]
+command      = "npx"
+args         = ["playwright", "test"]
+timeout_s    = 300
+kill_after_s = 10
+description  = "Playwright e2e suite"
+
+[project.project_python.jobs.test.platforms.desktop]
+command      = "swift"
+args         = ["test"]
+cwd          = "src/swift-app/CorePackage"
+timeout_s    = 600
+kill_after_s = 10
+description  = "Swift Package Manager tests"
+
+
+# ── logs ──────────────────────────────────────────────────────────────
+[project.project_python.jobs.logs.platforms.api]
+command     = "tail"
+args        = ["-n", "{lines}", "logs/api.log"]
+timeout_s   = 5
+[project.project_python.jobs.logs.platforms.api.placeholders.lines]
+regex    = "^([1-9][0-9]{0,2}|1[0-9]{3}|2000)$"
+required = true
+
+[project.project_python.jobs.logs.platforms.web]
+command     = "tail"
+args        = ["-n", "{lines}", "logs/vite.log"]
+timeout_s   = 5
+[project.project_python.jobs.logs.platforms.web.placeholders.lines]
+regex    = "^([1-9][0-9]{0,2}|1[0-9]{3}|2000)$"
+required = true
+
+
+# ── status ────────────────────────────────────────────────────────────
+[project.project_python.jobs.status.platforms.api]
+command     = "launchctl"
+args        = ["print", "gui/501/com.example.uvicorn"]
+timeout_s   = 5
+
+[project.project_python.jobs.status.platforms.web]
+command     = "launchctl"
+args        = ["print", "gui/501/com.example.vite"]
+timeout_s   = 5
+
+
+# ── deploy ────────────────────────────────────────────────────────────
+[project.project_python.jobs.deploy.platforms.api]
+command            = "fab"
+args               = ["-H", "root@example.com", "deploy"]
+timeout_s          = 240
+kill_after_s       = 10
+mutates_filesystem = true
+description        = "Pull + migrate + build + restart prod services (Fabric)"
+
+
+# ══════════════════════════════════════════════════════════════════════
+# NAMED JOBS
+# ══════════════════════════════════════════════════════════════════════
+
+# ── services ─────────────────────────────────────────────────────────
+# env-seed for launchd (required once per Mac session)
+[project.project_python.jobs.setenv]
+command      = "bash"
+args         = ["scripts/setenv-launchd.sh"]
+command_hash = { path = "scripts/setenv-launchd.sh", sha256 = "sha256:REPLACE_WITH_REAL_HASH" }
+timeout_s    = 10
+description  = "Push allowlisted secrets from env into launchd gui/501 (REQUIRED before any *-up after login/reboot)"
+
+# django service (3rd platform doesn't fit the up/down/restart verbs
+# cleanly since api+web are already taken, so it stays as named jobs)
+[project.project_python.jobs.django-up]
+command     = "launchctl"
+args        = ["bootstrap", "gui/501", "/Users/YOU/Library/LaunchAgents/com.example.django.plist"]
+timeout_s   = 10
+
+[project.project_python.jobs.django-down]
+command     = "launchctl"
+args        = ["bootout", "gui/501/com.example.django"]
+timeout_s   = 10
+
+[project.project_python.jobs.django-restart]
+command     = "launchctl"
+args        = ["kickstart", "-k", "gui/501/com.example.django"]
+timeout_s   = 10
+
+
+# ── apps ─────────────────────────────────────────────────────────────
+# redis (brew-managed; dev config store + rate-limit backend)
+[project.project_python.jobs.redis-up]
+command     = "brew"
+args        = ["services", "start", "redis"]
+timeout_s   = 15
+description = "Start the brew-managed redis (loopback 127.0.0.1:6379)"
+
+[project.project_python.jobs.redis-down]
+command     = "brew"
+args        = ["services", "stop", "redis"]
+timeout_s   = 15
+
+[project.project_python.jobs.redis-restart]
+command     = "brew"
+args        = ["services", "restart", "redis"]
+timeout_s   = 15
+
+[project.project_python.jobs.redis-status]
+command     = "bash"
+args        = ["-c", "redis-cli ping && echo '---' && brew services info redis"]
+timeout_s   = 10
+description = "redis-cli ping + brew services info redis"
+
+[project.project_python.jobs.redis-tail]
+command     = "tail"
+args        = ["-n", "{lines}", "/opt/homebrew/var/log/redis.log"]
+timeout_s   = 5
+description = "Tail the brew redis log"
+[project.project_python.jobs.redis-tail.placeholders.lines]
+regex    = "^([1-9][0-9]{0,2}|1[0-9]{3}|2000)$"
+required = true
+
+
+# ── dev tools ────────────────────────────────────────────────────────
+[project.project_python.jobs.smoke]
+command      = "bash"
+args         = ["scripts/ci/smoke.sh"]
+command_hash = { path = "scripts/ci/smoke.sh", sha256 = "sha256:REPLACE_WITH_REAL_HASH" }
+timeout_s    = 600
+kill_after_s = 5
+
+[project.project_python.jobs.lint-py-fix]
+command            = "ruff"
+args               = ["check", "--fix", "src/"]
+timeout_s          = 60
+description        = "Python lint with safe autofixes"
+mutates_filesystem = true
+
+[project.project_python.jobs.format-py]
+command            = "ruff"
+args               = ["format", "src/"]
+timeout_s          = 60
+description        = "Python format (ruff format)"
+mutates_filesystem = true
+
+[project.project_python.jobs.preview-fe]
+command     = "npm"
+args        = ["run", "preview"]
+timeout_s   = 5
+description = "Sanity-launch Vite preview"
+
+[project.project_python.jobs.e2e-update]
+command      = "npx"
+args         = ["playwright", "test", "--update-snapshots"]
+timeout_s    = 300
+kill_after_s = 10
+
+[project.project_python.jobs.e2e-spec]
+command      = "npx"
+args         = ["playwright", "test", "{spec}"]
+timeout_s    = 300
+kill_after_s = 10
+[project.project_python.jobs.e2e-spec.placeholders.spec]
+regex       = "^tests/playwright/specs/[A-Za-z0-9_-]{1,80}\\.spec\\.js$"
+max_len     = 160
+required    = true
+
+[project.project_python.jobs.pytest-filter]
+command      = "env"
+args         = ["DJANGO_SETTINGS_MODULE=myapp.config.local", "PYTHONPATH=/Users/YOU/Projects/project_python/src", ".venv/bin/python", "-m", "pytest", "-k", "{pattern}"]
+timeout_s    = 300
+kill_after_s = 5
+[project.project_python.jobs.pytest-filter.placeholders.pattern]
+regex       = "^[A-Za-z0-9_\\-]+$"
+required    = true
+
+[project.project_python.jobs.mypy]
+command      = "env"
+args         = ["DJANGO_SETTINGS_MODULE=myapp.config.local", "PYTHONPATH=/Users/YOU/Projects/project_python/src", ".venv/bin/python", "-m", "mypy"]
+timeout_s    = 180
+kill_after_s = 5
+
+
+# ── package management ───────────────────────────────────────────────
+# npm
+[project.project_python.jobs.npm-install-pkg]
+command            = "npm"
+args               = ["install", "{package}", "--no-save"]
+timeout_s          = 120
+mutates_filesystem = true
+[project.project_python.jobs.npm-install-pkg.placeholders.package]
+regex    = "^[@a-zA-Z0-9/_.\\-]+$"
+max_len  = 120
+required = true
+
+[project.project_python.jobs.npm-install-all]
+command            = "npm"
+args               = ["install"]
+timeout_s          = 600
+mutates_filesystem = true
+description        = "Full npm install at repo root"
+
+# pip
+[project.project_python.jobs.pip-install]
+command            = ".venv/bin/pip"
+args               = ["install", "{package}"]
+timeout_s          = 180
+mutates_filesystem = true
+[project.project_python.jobs.pip-install.placeholders.package]
+regex    = "^[A-Za-z0-9_.\\[\\]\\-]+(==[A-Za-z0-9._\\-]+)?$"
+max_len  = 120
+required = true
+
+[project.project_python.jobs.pip-uninstall]
+command            = ".venv/bin/pip"
+args               = ["uninstall", "-y", "{package}"]
+timeout_s          = 60
+mutates_filesystem = true
+[project.project_python.jobs.pip-uninstall.placeholders.package]
+regex    = "^[A-Za-z0-9_.\\[\\]\\-]+$"
+max_len  = 120
+required = true
+
+[project.project_python.jobs.pip-freeze]
+command   = ".venv/bin/pip"
+args      = ["freeze"]
+timeout_s = 30
+
+[project.project_python.jobs.pip-install-requirements]
+command            = ".venv/bin/pip"
+args               = ["install", "-r", "requirements.txt"]
+timeout_s          = 300
+kill_after_s       = 5
+mutates_filesystem = true
+
+
+# ── escape hatch (regulated subcommand passthrough) ──────────────────
+# Use ONLY when the surface you want to expose is bounded by a script
+# that already validates its own args. The placeholder regex is the
+# daemon's enforcement of that boundary — keep it tight.
+[project.project_python.jobs.myapp-cmd]
+command      = "bash"
+args         = ["scripts/builder/myapp-cmd.sh", "{cmd}"]
+command_hash = { path = "scripts/builder/myapp-cmd.sh", sha256 = "sha256:REPLACE_WITH_REAL_HASH" }
+timeout_s    = 120
+description  = "Run `myapp <subcommand>` end-to-end"
+[project.project_python.jobs.myapp-cmd.placeholders.cmd]
+regex       = "^[A-Za-z0-9_ @./:-]+$"
+max_len     = 200
+required    = true
+
+
+# ── data ─────────────────────────────────────────────────────────────
+# postgres
+[project.project_python.jobs.pg-status]
+command   = "pg_isready"
+args      = ["-h", "127.0.0.1", "-p", "5432"]
+timeout_s = 10
+
+[project.project_python.jobs.pg-restart]
+command   = "brew"
+args      = ["services", "restart", "postgresql@16"]
+timeout_s = 30
+
+# db utilities
+[project.project_python.jobs.db-query]
+command      = "bash"
+args         = ["scripts/builder/db-query.sh", "{sql}"]
+command_hash = { path = "scripts/builder/db-query.sh", sha256 = "sha256:REPLACE_WITH_REAL_HASH" }
+timeout_s    = 30
+[project.project_python.jobs.db-query.placeholders.sql]
+regex       = "^[^;]+;?\\s*$"
+max_len     = 4096
+required    = true
+
+[project.project_python.jobs.db-backup]
+command            = "env"
+args               = ["PGHOST=127.0.0.1", "PGPORT=5432", "PGUSER=myapp", "PGDATABASE=myapp", "pg_dump", "--no-owner", "--no-privileges", "--file", "logs/db-backup-latest.sql"]
+timeout_s          = 120
+mutates_filesystem = true
+
+# django management
+[project.project_python.jobs.django-migrate]
+command      = "env"
+args         = ["DJANGO_SETTINGS_MODULE=myapp.config.local", "PYTHONPATH=/Users/YOU/Projects/project_python/src", ".venv/bin/python", "src/myapp/manage.py", "migrate"]
+timeout_s    = 120
+
+[project.project_python.jobs.django-makemigrations]
+command            = "env"
+args               = ["DJANGO_SETTINGS_MODULE=myapp.config.local", "PYTHONPATH=/Users/YOU/Projects/project_python/src", ".venv/bin/python", "src/myapp/manage.py", "makemigrations"]
+timeout_s          = 60
+mutates_filesystem = true
+
+[project.project_python.jobs.django-check]
+command      = "env"
+args         = ["DJANGO_SETTINGS_MODULE=myapp.config.local", "PYTHONPATH=/Users/YOU/Projects/project_python/src", ".venv/bin/python", "src/myapp/manage.py", "check"]
+timeout_s    = 30
+
+[project.project_python.jobs.django-check-deploy]
+command      = "env"
+args         = ["DJANGO_SETTINGS_MODULE=myapp.config.local", "PYTHONPATH=/Users/YOU/Projects/project_python/src", ".venv/bin/python", "src/myapp/manage.py", "check", "--deploy"]
+timeout_s    = 30
+
+[project.project_python.jobs.django-collectstatic]
+command      = "env"
+args         = ["DJANGO_SETTINGS_MODULE=myapp.config.local", "PYTHONPATH=/Users/YOU/Projects/project_python/src", ".venv/bin/python", "src/myapp/manage.py", "collectstatic", "--noinput"]
+timeout_s    = 60

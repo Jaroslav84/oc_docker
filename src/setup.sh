@@ -24,7 +24,7 @@ STEP_COLOR="${C2:-$'\033[38;5;39m'}"
 # launcher calls one after sourcing. (setup/preflight.sh is sourced by the
 # launchers directly, before this file.)
 _SETUP_DIR="$SCRIPT_DIR/setup"
-for _m in banner log docker_log config docker identity launcher image; do
+for _m in banner log docker_log config safe_delete mask clipboard prefill docker identity launcher image; do
     if [ ! -f "$_SETUP_DIR/$_m.sh" ]; then
         printf 'setup.sh: missing module %s/%s.sh — broken install?\n' "$_SETUP_DIR" "$_m" >&2
         exit 1

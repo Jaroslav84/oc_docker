@@ -44,6 +44,16 @@
             }
           ]
         }
+      ],
+      "Stop": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "p=$(grep -liE '^[[:space:]]*(\\*\\*)?mode:?(\\*\\*)?[[:space:]]*`?yolo' plans/[0-9]*-*.md 2>/dev/null | head -1); [ -z \"$p\" ] && exit 0; grep -qE '^[[:space:]]*- \\[ \\]' \"$p\" && { echo \"YOLO: unchecked tasks remain in $p. Do the next one, edit that file ONLY, never create a new plan. Tick boxes + update %.\" >&2; exit 2; }; exit 0"
+            }
+          ]
+        }
       ]
     }
   }

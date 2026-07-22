@@ -31,7 +31,7 @@ done
 [ "$miss" -eq 0 ] && _ok "all $(echo $EXPECTED | wc -w | tr -d ' ') functions present"
 
 echo "[2/4] install.d steps concatenate into parseable bash"
-STEPS="01-docker 02-dirs 03-env 04-workspace 05-apikeys 06-ssh 07-builderapi 08-tmux 09-devpacks 10-image 11-link 99-complete"
+STEPS="01-docker 02-dirs 03-env 04-workspace 05-apikeys 06a-ssh-inbound 06b-ssh-outbound 07-builderapi 08-tmux 09-devpacks 10-image 11-link 99-complete"
 catcmd=""
 for s in $STEPS; do catcmd="$catcmd $SRC/install.d/$s.sh"; done
 if cat $catcmd 2>/dev/null | bash -n; then _ok "install.d reconstruction parses"; else _err "install.d concat fails bash -n"; fi

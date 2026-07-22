@@ -20,11 +20,28 @@
 # read-only workspace mount (an agent literally can't write the protected
 # paths); this shim makes the writable project recoverable and stops the
 # obvious `rm -rf /root/Projects` foot-gun for non-Claude tools too.
+#
+# ONE onion layer — this shim catches only tools that shell out to `rm`.
+# Anything that deletes another way bypasses (python `os.remove`, node
+# `fs.unlinkSync`, `busybox rm`, `/bin/unlink`, `dd of=X`, `truncate -s0`,
+# `find -delete`, direct syscalls, etc.). It stacks with the workspace
+# ro-mount + trash routing + macOS snapshots for real safety. Don't remove
+# because "it can be bypassed" — the layer has no downside, and layers stack.
 
 set -u
 
 REAL_RM="/bin/rm"
 TRASH_BIN="$(command -v trash-put || command -v trash || true)"
+if [ -z "$TRASH_BIN" ]; then
+    # Fire the WARN once per container (marker in /tmp clears on restart).
+    _WARN_MARKER=/tmp/.rm-guard-trash-warned
+    if [ ! -f "$_WARN_MARKER" ]; then
+        printf 'rm-guard: WARNING: trash-cli missing — every rm outside /tmp will REFUSE (safe default).\n' >&2
+        printf 'rm-guard:          rebuild the image or `apt-get install trash-cli` to restore trashing.\n' >&2
+        touch "$_WARN_MARKER" 2>/dev/null || true
+    fi
+    unset _WARN_MARKER
+fi
 DOCKER_DIR="${DOCKER_DIR:-/root/Projects}"
 
 # Absolute, symlink/.. normalized path WITHOUT requiring existence.
@@ -64,7 +81,7 @@ _is_ephemeral() {
 # Try the host-side trash job via builder-api. Returns 0 on success.
 _api_trash() {
     local p; p="$(_norm "$1")"
-    [ -n "${BUILDER_API_PASSWORD:-}" ] || return 1
+    [ -n "${BUILDER_API_P4SS:-}" ] || return 1
     command -v curl >/dev/null 2>&1 || return 1
     # Only for paths inside the writable project mount.
     case "$p" in "$DOCKER_DIR"/*) : ;; *) return 1 ;; esac
@@ -74,7 +91,7 @@ _api_trash() {
     [ -z "$rel" ] && return 1                 # never trash a whole project via API
     local host="${BUILDER_API_HOST:-host.docker.internal}" port="${BUILDER_API_PORT:-6666}"
     curl -fsS -m 8 -X POST \
-        -H "X-Builder-API-Password: $BUILDER_API_PASSWORD" \
+        -H "X-Builder-API-Password: $BUILDER_API_P4SS" \
         -H 'Content-Type: application/json' \
         --data "$(printf '{"params":{"path":"%s"},"agent_id":"rm-guard"}' "$rel")" \
         "http://$host:$port/job/trash" >/dev/null 2>&1

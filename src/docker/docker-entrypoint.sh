@@ -85,21 +85,62 @@ fi
 
 # Start sshd if enabled in llm-docker.conf. Runs in background; the tool
 # (claude/opencode) still owns the foreground TTY.
-if [ "${LLM_DOCKER_SSH_ENABLED:-false}" = "true" ] && [ -x /setup-ssh.sh ]; then
+if [ "${LLM_D0CKER_SHH_EN4BLED:-false}" = "true" ] && [ -x /setup-ssh.sh ]; then
     /setup-ssh.sh || echo "[SSH] setup-ssh.sh failed — container continues without ssh"
 fi
 
-# Outbound SSH: if the host mounted ~/.llm-docker/ssh-out at /root/.ssh-out,
-# install its keys + config into ~/.ssh with strict perms (ssh refuses a
-# group/world-readable private key, and a :ro bind-mount can't be chmod'd).
-# Lets `ssh <host>` from inside the container reach e.g. a LAN box.
-if [ -d /root/.ssh-out ]; then
+# Outbound SSH — in-container ssh-agent pattern.
+#
+# Keys arrive via env-gorilla vault (or plain .env) as base64-encoded env
+# vars. They are loaded into an in-container ssh-agent via `ssh-add -`
+# (stdin) and NEVER written to disk. The only file that touches disk is
+# /root/.ssh/config — plaintext hostnames + users, no secret material.
+# Trap on EXIT kills the agent so keys leave memory when the container stops.
+#
+# The ssh_config comes from one of two sources, in priority order:
+#   1. $S3C_ATTACHMENT_DIR/config — file dropped by env-gorilla at unlock time
+#      (vault mode with attachment support)
+#   2. $LLM_D0CKER_SHH_CFG_B64    — base64-encoded config in the env var
+#      (.env fallback mode for public users without s3c-gorilla)
+#
+# Every login shell inherits SSH_AUTH_SOCK via /etc/profile.d/ssh-agent.sh.
+if [ -n "${LLMD0CKER_SHH_3D25519_PVYT_B64:-}${PS4_SHH_3D25519_PVYT_B64:-}${LLM_D0CKER_SHH_CFG_B64:-}" ] \
+   || [ -f "${S3C_ATTACHMENT_DIR:-}/config" ]; then
+    eval "$(ssh-agent -s)" >/dev/null
+    export SSH_AUTH_SOCK SSH_AGENT_PID
+    printf 'export SSH_AUTH_SOCK=%s\nexport SSH_AGENT_PID=%s\n' \
+        "$SSH_AUTH_SOCK" "$SSH_AGENT_PID" > /etc/profile.d/ssh-agent.sh
+    chmod 644 /etc/profile.d/ssh-agent.sh
+
+    _load_key() {
+        local var="$1" label="$2"
+        local val="${!var}"
+        [ -n "$val" ] || return 0
+        if printf '%s' "$val" | base64 -d 2>/dev/null | ssh-add - >/dev/null 2>&1; then
+            echo "[ssh-agent] loaded $label"
+        else
+            echo "[ssh-agent] FAILED to load $label — check $var in vault/.env"
+        fi
+    }
+    _load_key LLMD0CKER_SHH_3D25519_PVYT_B64 llmdocker
+    _load_key PS4_SHH_3D25519_PVYT_B64       ps4
+
     mkdir -p /root/.ssh && chmod 700 /root/.ssh
-    for _f in /root/.ssh-out/*; do
-        [ -f "$_f" ] || continue
-        cp "$_f" "/root/.ssh/$(basename "$_f")" && chmod 600 "/root/.ssh/$(basename "$_f")"
-    done
-    unset _f
+    if [ -f "${S3C_ATTACHMENT_DIR:-}/config" ]; then
+        cp "$S3C_ATTACHMENT_DIR/config" /root/.ssh/config
+        chmod 600 /root/.ssh/config
+        echo "[ssh-agent] loaded /root/.ssh/config from vault attachment ($S3C_ATTACHMENT_DIR/config)"
+    elif [ -n "${LLM_D0CKER_SHH_CFG_B64:-}" ]; then
+        printf '%s' "$LLM_D0CKER_SHH_CFG_B64" | base64 -d > /root/.ssh/config
+        chmod 600 /root/.ssh/config
+        echo "[ssh-agent] loaded /root/.ssh/config from .env base64"
+    else
+        echo "[ssh-agent] WARNING: no ~/.ssh/config found — vault attachment missing and LLM_D0CKER_SHH_CFG_B64 empty."
+        echo "[ssh-agent]   → outbound ssh will fall back to ssh's built-in defaults."
+        echo "[ssh-agent]   → attach 'config' to KeePassXC entry SSH/llm-docker-ssh-config, OR set LLM_D0CKER_SHH_CFG_B64 in .env."
+    fi
+
+    trap 'ssh-agent -k >/dev/null 2>&1' EXIT
 fi
 
 # Auto-update claude-code and opencode on launch when UPDATE_ON_START=true.
@@ -220,41 +261,44 @@ elif [ "$TOOL" = "claude" ]; then
         VERBOSE=true
     fi
 
-    # Re-seed Claude Code permissions from the repo-bundled template, but
-    # ONLY on a fresh session. Resuming (-c or --resume <uuid>) preserves
-    # whatever the user accumulated ("allow this once" grants etc.) — cld
-    # sets NEW_CLAUDE_SESSION=false in that case.
-    if [ "${NEW_CLAUDE_SESSION:-false}" = "true" ] \
+    # Seed Claude Code permissions from the repo-bundled template ONLY on
+    # first launch (when settings.local.json is absent). Yaro's
+    # ~/.llm-docker/claude/.claude/ is now a git-tracked source of truth
+    # synced across his 2 macs — clobbering it every fresh session would
+    # destroy his customizations.
+    if [ ! -s /root/.claude/settings.local.json ] \
        && [ -f /opt/llm-docker/templates/claude-settings.json ]; then
         cp /opt/llm-docker/templates/claude-settings.json /root/.claude/settings.local.json
         if [ "$VERBOSE" = "true" ]; then
-            echo "[claude] fresh session — re-applied default permissions" \
-                 "from /opt/llm-docker/templates/claude-settings.json"
+            echo "[claude] first launch — seeded settings.local.json from template"
         fi
     fi
 
-    # --danger / --dg on host → bypass permissions entirely. Overwrites
-    # settings.local.json with the bypassPermissions stanza AND prepends
-    # --dangerously-skip-permissions to claude's argv below.
+    # --danger / --dg on host → bypass permissions entirely. The argv flag
+    # below is what actually enables it; the settings.local.json entry is
+    # belt-and-suspenders. Only seed the file if missing — do NOT clobber
+    # the user's existing settings.
     if [ "${DANGER_MODE:-false}" = "true" ]; then
-        cat > /root/.claude/settings.local.json <<'EOF'
+        if [ ! -s /root/.claude/settings.local.json ]; then
+            cat > /root/.claude/settings.local.json <<'EOF'
 {
   "permissions": {
     "defaultMode": "bypassPermissions"
   }
 }
 EOF
+        fi
         set -- --dangerously-skip-permissions "$@"
         if [ "$VERBOSE" = "true" ]; then
-            echo "[claude] DANGER_MODE=true — --dangerously-skip-permissions + bypassPermissions settings applied"
+            echo "[claude] DANGER_MODE=true — --dangerously-skip-permissions applied"
         fi
     fi
 
-    if [ -n "$ANTHROPIC_API_KEY" ]; then
-        export ANTHROPIC_API_KEY
+    if [ -n "$_4NTHR0P1C_H4NDLE" ]; then
+        export _4NTHR0P1C_H4NDLE
 
         if [ "$VERBOSE" = "true" ]; then
-            echo "ANTHROPIC_API_KEY is set (length: ${#ANTHROPIC_API_KEY} chars)"
+            echo "_4NTHR0P1C_H4NDLE is set (length: ${#_4NTHR0P1C_H4NDLE} chars)"
             echo "Configuring Claude Code to use API key authentication..."
         fi
 

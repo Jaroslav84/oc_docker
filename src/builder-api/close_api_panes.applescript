@@ -90,8 +90,11 @@ on run argv
                                 else
                                     -- Legacy fallback (no caller tty): match by
                                     -- daemon tty / title / cld-status|verbose names
-                                    -- / pgrep'd ttys.
-                                    if (apiTty is not "" and stt is apiTty) or ((name of s) is sessTitle) or ((name of s) is "cld-status") or ((name of s) is "verbose") or (my listHas(statusTtys, stt)) then set isVictim to true
+                                    -- / pgrep'd ttys. `contains` catches auto-renamed
+                                    -- panes (iTerm rewrites the name to the running
+                                    -- command's title, so exact `is` was missing them).
+                                    set snm to name of s
+                                    if (apiTty is not "" and stt is apiTty) or (snm is sessTitle) or (snm contains "cld-status") or (snm contains "verbose") or (my listHas(statusTtys, stt)) then set isVictim to true
                                 end if
                                 if isVictim then
                                     set end of victims to s

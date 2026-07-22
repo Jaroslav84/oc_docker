@@ -50,8 +50,8 @@ if os.environ.get("NO_COLOR"):
     def _titlebar(text): return f"{text}\n"
 else:
     P = "\033[1;35m"; R = "\033[31m"; D = "\033[2m"; RST = "\033[0m"
-    def _titlebar(text):  # bright-blue chip, dark bold text, filled to edge
-        return f"\033[48;5;39m\033[38;5;16;1m {text} \033[K\033[0m\n"
+    def _titlebar(text):  # ywizz purple chip, dark bold text, filled to edge
+        return f"\033[48;5;177m\033[38;5;16;1m {text} \033[K\033[0m\n"
 
 CLEAR = "\033[2J\033[H"
 

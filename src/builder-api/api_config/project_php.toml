@@ -1,0 +1,488 @@
+# ──────────────────────────────────────────────────────────────────────
+# project_php — EXAMPLE project shard (PHP-heavy, docker-compose stack)
+# ──────────────────────────────────────────────────────────────────────
+#
+# Copy this file to `~/.llm-docker/api_config/<your-app>.toml`, rename
+# every `project_php` reference to `<your-app>`, then edit paths /
+# ports / compose service names / bundle IDs to match your real project.
+#
+# What it demonstrates:
+#   - docker-compose stack (mysql + redis + workspace + app)
+#   - Angular workspace + iOS Xcode workspace + Objective-C library
+#   - Lumen (host-side php) + Slim (in-container php) — TWO deployables
+#   - In-container PHPUnit reaching real mysql / redis
+#   - Envoy-based deploys with the {server, branch} regex-bounded pattern
+#   - Host-side Laravel `artisan` commands
+#   - compose-exec — a diagnostic snippet allowlist enforced by regex-enum
+#     (the daemon's boundary between "safe read-only probe" and
+#     "arbitrary shell in the container")
+#
+# Layout:
+#   [project.project_php]     header
+#   GENERIC VERBS             up / down / restart / build / lint / test /
+#                             logs / status / deploy (platform-based)
+#   NAMED JOBS                deploy aliases → website → screenshots →
+#                             backend testing → artisan (host + docker) →
+#                             iOS tools → compose lifecycle → angular →
+#                             frontend tools → git utility
+
+[project.project_php]
+root      = "~/Projects/project_php"
+port      = 6702
+languages = ["php", "node", "compose"]
+
+
+# ══════════════════════════════════════════════════════════════════════
+# GENERIC VERBS — preferred entry points for agents
+# ══════════════════════════════════════════════════════════════════════
+
+# ── up ────────────────────────────────────────────────────────────────
+[project.project_php.jobs.up.platforms.web]
+command     = "docker"
+args        = ["compose", "-f", "src/docker/docker-compose.yml", "up", "-d"]
+timeout_s   = 300
+description = "Start the compose stack (web + api + workspace + mysql + redis)"
+
+[project.project_php.jobs.up.platforms.api]
+command     = "docker"
+args        = ["compose", "-f", "src/docker/docker-compose.yml", "up", "-d"]
+timeout_s   = 300
+description = "Same compose stack as `up web` — Lumen api runs in the app container"
+
+[project.project_php.jobs.up.platforms.ios]
+command      = "bash"
+args         = ["build-and-run.sh"]
+cwd          = "src/ios"
+timeout_s    = 1800
+kill_after_s = 15
+command_hash = { path = "src/ios/build-and-run.sh", sha256 = "sha256:REPLACE_WITH_REAL_HASH" }
+description  = "Build + boot sim + install + launch the iOS app"
+
+
+# ── down ──────────────────────────────────────────────────────────────
+[project.project_php.jobs.down.platforms.web]
+command     = "docker"
+args        = ["compose", "-f", "src/docker/docker-compose.yml", "down"]
+timeout_s   = 60
+description = "Stop and REMOVE every compose service (containers + network)"
+
+[project.project_php.jobs.down.platforms.api]
+command     = "docker"
+args        = ["compose", "-f", "src/docker/docker-compose.yml", "down"]
+timeout_s   = 60
+description = "Same as `down web`"
+
+
+# ── restart ───────────────────────────────────────────────────────────
+[project.project_php.jobs.restart.platforms.web]
+command     = "docker"
+args        = ["compose", "-f", "src/docker/docker-compose.yml", "restart"]
+timeout_s   = 120
+description = "Restart every compose service in place"
+
+[project.project_php.jobs.restart.platforms.api]
+command     = "docker"
+args        = ["compose", "-f", "src/docker/docker-compose.yml", "restart"]
+timeout_s   = 120
+description = "Same as `restart web`"
+
+
+# ── build ─────────────────────────────────────────────────────────────
+[project.project_php.jobs.build.platforms.web]
+command      = "bash"
+args         = ["scripts/host-snippets/angular-build.sh"]
+timeout_s    = 1800
+command_hash = { path = "scripts/host-snippets/angular-build.sh", sha256 = "sha256:REPLACE_WITH_REAL_HASH" }
+description  = "Production Angular build"
+
+[project.project_php.jobs.build.platforms.ios]
+command      = "xcodebuild"
+args         = ["-workspace", "Example.xcworkspace", "-scheme", "Example", "-configuration", "Debug", "-destination", "generic/platform=iOS Simulator", "build"]
+cwd          = "src/ios"
+timeout_s    = 1800
+kill_after_s = 15
+description  = "Build the iOS app for the simulator (Debug)"
+
+
+# ── lint ──────────────────────────────────────────────────────────────
+[project.project_php.jobs.lint.platforms.web]
+command      = "bash"
+args         = ["scripts/host-snippets/angular-lint.sh", "{flags}"]
+timeout_s    = 600
+command_hash = { path = "scripts/host-snippets/angular-lint.sh", sha256 = "sha256:REPLACE_WITH_REAL_HASH" }
+description  = "Full frontend linter"
+[project.project_php.jobs.lint.platforms.web.placeholders.flags]
+regex    = "^(--(js-only|html-only|ts-only|no-ts|fast|summary-only|prettier|no-custom|no-unclosed|show-commented|no-color|debug))?$"
+required = false
+
+[project.project_php.jobs.lint.platforms.ios]
+command     = "pod"
+args        = ["lib", "lint", "ExampleLib.podspec", "--allow-warnings"]
+cwd         = "src/objc-lib"
+timeout_s   = 900
+description = "pod lib lint (proves the ObjC surface)"
+
+
+# ── test ──────────────────────────────────────────────────────────────
+[project.project_php.jobs.test.platforms.web]
+command     = "npm"
+args        = ["test"]
+cwd         = "src/angular"
+timeout_s   = 300
+description = "Angular test suite (jest)"
+
+[project.project_php.jobs.test.platforms.ios]
+command     = "swift"
+args        = ["test"]
+cwd         = "src/objc-lib"
+timeout_s   = 600
+description = "Swift test suite for the ObjC bridge"
+
+[project.project_php.jobs.test.platforms.api]
+command      = "bash"
+args         = ["-c", "cd src/api && exec vendor/bin/phpunit"]
+timeout_s    = 300
+command_hash = { path = "src/api/vendor/bin/phpunit", sha256 = "sha256:REPLACE_WITH_REAL_HASH" }
+description  = "Lumen api PHPUnit (host-side, cwd=src/api)"
+
+
+# ── logs ──────────────────────────────────────────────────────────────
+[project.project_php.jobs.logs.platforms.api]
+command     = "tail"
+args        = ["-n", "{lines}", "src/docker/logs/app/app.log"]
+timeout_s   = 10
+description = "Tail the Lumen api log"
+[project.project_php.jobs.logs.platforms.api.placeholders.lines]
+regex    = "^([1-9][0-9]{0,2}|1[0-9]{3}|2000)$"
+required = true
+
+[project.project_php.jobs.logs.platforms.web]
+command      = "bash"
+args         = ["scripts/host-snippets/angular-tail.sh", "{lines}"]
+timeout_s    = 5
+command_hash = { path = "scripts/host-snippets/angular-tail.sh", sha256 = "sha256:REPLACE_WITH_REAL_HASH" }
+description  = "Tail logs/angular-dev.log"
+[project.project_php.jobs.logs.platforms.web.placeholders.lines]
+regex    = "^([1-9][0-9]{0,2}|1[0-9]{3}|2000)$"
+required = false
+
+
+# ── status ────────────────────────────────────────────────────────────
+[project.project_php.jobs.status.platforms.web]
+command      = "bash"
+args         = ["scripts/host-snippets/angular-status.sh"]
+timeout_s    = 5
+command_hash = { path = "scripts/host-snippets/angular-status.sh", sha256 = "sha256:REPLACE_WITH_REAL_HASH" }
+description  = "Liveness probe: pidfile alive + port 9000 listener"
+
+[project.project_php.jobs.status.platforms.api]
+command     = "docker"
+args        = ["compose", "-f", "src/docker/docker-compose.yml", "ps"]
+timeout_s   = 10
+description = "Compose service status"
+
+
+# ── deploy ────────────────────────────────────────────────────────────
+# Envoy's task variables need the `--server=X --branch=Y` form (= sign),
+# not space-separated, otherwise $server/$branch aren't bound inside the
+# Envoy.blade.php task. Daemon's placeholder validator rejects embedded
+# substrings (`--server={server}` as one arg), so we go through a bash
+# -c wrapper that builds the = form internally. Placeholders stay
+# standalone elements (regex still applied) and the daemon sees nothing
+# different from any other safe job.
+[project.project_php.jobs.deploy.platforms.web]
+command            = "bash"
+args               = ["-c", "exec envoy run deploy --server=\"$1\" --branch=\"$2\"", "--", "{server}", "{branch}"]
+cwd                = "src/angular"
+timeout_s          = 1800
+kill_after_s       = 10
+mutates_filesystem = true
+description        = "Deploy the Angular frontend via Envoy"
+[project.project_php.jobs.deploy.platforms.web.placeholders.branch]
+regex    = "^[A-Za-z0-9._/\\-]{1,80}$"
+max_len  = 80
+required = true
+[project.project_php.jobs.deploy.platforms.web.placeholders.server]
+regex    = "^[a-z][a-z0-9_-]{0,30}$"
+max_len  = 30
+required = true
+
+[project.project_php.jobs.deploy.platforms.api]
+command            = "bash"
+args               = ["-c", "exec envoy run deploy --server=\"$1\" --branch=\"$2\"", "--", "{server}", "{branch}"]
+cwd                = "src/php"
+timeout_s          = 1800
+kill_after_s       = 10
+mutates_filesystem = true
+description        = "Deploy the Slim backend via Envoy"
+[project.project_php.jobs.deploy.platforms.api.placeholders.branch]
+regex    = "^[A-Za-z0-9._/\\-]{1,80}$"
+max_len  = 80
+required = true
+[project.project_php.jobs.deploy.platforms.api.placeholders.server]
+regex    = "^[a-z][a-z0-9_-]{0,30}$"
+max_len  = 30
+required = true
+
+
+# ══════════════════════════════════════════════════════════════════════
+# NAMED JOBS
+# ══════════════════════════════════════════════════════════════════════
+
+# ── deployables (named aliases — for clients that can't send ?platform=…) ──
+[project.project_php.jobs.deploy-backend]
+command            = "bash"
+args               = ["-c", "exec envoy run deploy --server=\"$1\" --branch=\"$2\"", "--", "{server}", "{branch}"]
+cwd                = "src/php"
+timeout_s          = 1800
+kill_after_s       = 10
+mutates_filesystem = true
+description        = "Deploy the Slim backend via Envoy — same target as deploy?platform=api"
+[project.project_php.jobs.deploy-backend.placeholders.server]
+regex    = "^[a-z][a-z0-9_-]{0,30}$"
+max_len  = 30
+required = true
+[project.project_php.jobs.deploy-backend.placeholders.branch]
+regex    = "^[A-Za-z0-9._/\\-]{1,80}$"
+max_len  = 80
+required = true
+
+[project.project_php.jobs.deploy-frontend]
+command            = "bash"
+args               = ["-c", "exec envoy run deploy --server=\"$1\" --branch=\"$2\"", "--", "{server}", "{branch}"]
+cwd                = "src/angular"
+timeout_s          = 1800
+kill_after_s       = 10
+mutates_filesystem = true
+description        = "Deploy the Angular app via Envoy — same target as deploy?platform=web"
+[project.project_php.jobs.deploy-frontend.placeholders.server]
+regex    = "^[a-z][a-z0-9_-]{0,30}$"
+max_len  = 30
+required = true
+[project.project_php.jobs.deploy-frontend.placeholders.branch]
+regex    = "^[A-Za-z0-9._/\\-]{1,80}$"
+max_len  = 80
+required = true
+
+
+# ── backend testing (in-container; reaches real mysql/redis) ──────────
+[project.project_php.jobs.phpunit-local]
+command     = "docker"
+args        = ["compose", "-f", "src/docker/docker-compose.yml", "exec", "-T", "-w", "/var/www/src", "workspace", "php", "vendor/phpunit/phpunit/phpunit"]
+timeout_s   = 300
+description = "Full backend (php/src) PHPUnit suite inside workspace container. Invokes the real binary via php so a missing vendor/bin/phpunit proxy doesn't break us."
+
+[project.project_php.jobs.phpunit-local-filter]
+command     = "docker"
+args        = ["compose", "-f", "src/docker/docker-compose.yml", "exec", "-T", "-w", "/var/www/src", "workspace", "php", "vendor/phpunit/phpunit/phpunit", "--filter", "{test}"]
+timeout_s   = 300
+description = "One backend PHPUnit class or method by name, in-container"
+[project.project_php.jobs.phpunit-local-filter.placeholders.test]
+regex       = "^[A-Za-z][A-Za-z0-9_:]*$"
+max_len     = 200
+required    = true
+description = "Test class or Class::method (alphanumerics + _:)"
+
+[project.project_php.jobs.composer-install-local]
+command            = "docker"
+args               = ["compose", "-f", "src/docker/docker-compose.yml", "exec", "-T", "-w", "/var/www/src", "workspace", "composer", "install"]
+timeout_s          = 600
+mutates_filesystem = true
+description        = "composer install (with dev) in php/src inside the workspace container"
+
+
+# ── artisan (Lumen api, host-side) ───────────────────────────────────
+[project.project_php.jobs.artisan-migrate]
+command            = "php"
+args               = ["artisan", "migrate", "--force"]
+cwd                = "src/api"
+timeout_s          = 120
+mutates_filesystem = true
+description        = "Run pending Lumen migrations (host-side)"
+
+[project.project_php.jobs.artisan-migrate-rollback]
+command            = "php"
+args               = ["artisan", "migrate:rollback", "--force"]
+cwd                = "src/api"
+timeout_s          = 60
+mutates_filesystem = true
+
+[project.project_php.jobs.artisan-migrate-status]
+command     = "php"
+args        = ["artisan", "migrate:status"]
+cwd         = "src/api"
+timeout_s   = 30
+
+[project.project_php.jobs.artisan-cache-clear]
+command            = "php"
+args               = ["artisan", "cache:clear"]
+cwd                = "src/api"
+timeout_s          = 30
+mutates_filesystem = true
+
+[project.project_php.jobs.artisan-config-clear]
+command            = "php"
+args               = ["artisan", "config:clear"]
+cwd                = "src/api"
+timeout_s          = 30
+mutates_filesystem = true
+
+[project.project_php.jobs.artisan-route-list]
+command     = "php"
+args        = ["artisan", "route:list"]
+cwd         = "src/api"
+timeout_s   = 30
+
+
+# ── artisan (in-container against local docker mysql) ────────────────
+[project.project_php.jobs.artisan-migrate-local]
+command            = "docker"
+args               = ["compose", "-f", "src/docker/docker-compose.yml", "exec", "-T", "-w", "/var/www/api", "workspace", "php", "artisan", "migrate", "--force"]
+timeout_s          = 120
+mutates_filesystem = true
+description        = "Run pending migrations against local Docker MySQL (workspace container)"
+
+
+# ── iOS tools ────────────────────────────────────────────────────────
+[project.project_php.jobs.ios-restart]
+command     = "bash"
+args        = ["-c", "xcrun simctl terminate booted com.example.app; exec xcrun simctl launch booted com.example.app"]
+cwd         = "src/ios"
+timeout_s   = 30
+description = "Terminate + relaunch the iOS app on the booted simulator (no rebuild)"
+
+[project.project_php.jobs.ios-pod-install]
+command            = "pod"
+args               = ["install"]
+cwd                = "src/ios"
+timeout_s          = 600
+mutates_filesystem = true
+
+[project.project_php.jobs.ios-clean]
+command     = "xcodebuild"
+args        = ["-workspace", "Example.xcworkspace", "-scheme", "Example", "-configuration", "Debug", "clean"]
+cwd         = "src/ios"
+timeout_s   = 300
+
+[project.project_php.jobs.ios-buildlog]
+command     = "xclogparser"
+args        = ["parse", "--project", "Example", "--reporter", "issues"]
+cwd         = "src/ios"
+timeout_s   = 60
+description = "Parse the latest Xcode build log (errors + warnings)"
+
+
+# ── compose lifecycle ────────────────────────────────────────────────
+# Overrides language pack so every compose-* job pins the project's
+# docker-compose file. compose-down / compose-build are gated by
+# mutates_filesystem — agents must send X-Mutation-Confirmed: yes or
+# ?confirm=yes to fire them.
+[project.project_php.jobs.compose-ps]
+command   = "docker"
+args      = ["compose", "-f", "src/docker/docker-compose.yml", "ps"]
+timeout_s = 10
+
+[project.project_php.jobs.compose-up]
+command   = "docker"
+args      = ["compose", "-f", "src/docker/docker-compose.yml", "up", "-d"]
+timeout_s = 300
+
+[project.project_php.jobs.compose-down]
+command            = "docker"
+args               = ["compose", "-f", "src/docker/docker-compose.yml", "down"]
+timeout_s          = 60
+mutates_filesystem = true
+
+[project.project_php.jobs.compose-stop]
+command     = "docker"
+args        = ["compose", "-f", "src/docker/docker-compose.yml", "stop"]
+timeout_s   = 60
+description = "Stop every compose service WITHOUT removing containers"
+
+[project.project_php.jobs.compose-restart]
+command = "docker"
+args    = ["compose", "-f", "src/docker/docker-compose.yml", "restart", "{service}"]
+[project.project_php.jobs.compose-restart.placeholders.service]
+regex   = "^[a-zA-Z0-9_-]+$"
+
+[project.project_php.jobs.compose-build]
+command            = "docker"
+args               = ["compose", "-f", "src/docker/docker-compose.yml", "build", "{service}"]
+mutates_filesystem = true
+[project.project_php.jobs.compose-build.placeholders.service]
+regex   = "^[a-zA-Z0-9_-]+$"
+
+[project.project_php.jobs.compose-logs]
+command = "docker"
+args    = ["compose", "-f", "src/docker/docker-compose.yml", "logs", "--tail=200", "{service}"]
+[project.project_php.jobs.compose-logs.placeholders.service]
+regex   = "^[a-zA-Z0-9_-]+$"
+
+# compose-exec — READ-ONLY diagnostic snippet allowlist.
+# Snippet name is regex-bounded to an explicit list of read-only
+# diagnostic scripts at scripts/exec-snippets/<name>.sh (host) →
+# /var/www/scripts/exec-snippets/<name>.sh (workspace mount). Mutating
+# operations (artisan-migrate, composer-install, …) MUST NOT be added
+# to this allowlist — they have their own gated jobs. The regex-enum
+# IS the daemon's boundary, not a convention.
+[project.project_php.jobs.compose-exec]
+command     = "docker"
+args        = ["compose", "-f", "src/docker/docker-compose.yml", "exec", "-T", "workspace", "bash", "-c", "exec /var/www/scripts/exec-snippets/\"$1\".sh", "--", "{snippet}"]
+timeout_s   = 60
+description = "One of the pre-approved read-only diagnostic snippets"
+[project.project_php.jobs.compose-exec.placeholders.snippet]
+regex    = "^(verify|phpinfo|redis-ping|mysql-version|tail-errors|php-lint-changed)$"
+max_len  = 40
+required = true
+
+
+# ── angular dev daemon (host-side) ───────────────────────────────────
+[project.project_php.jobs.angular-install]
+command      = "bash"
+args         = ["scripts/host-snippets/angular-install.sh"]
+timeout_s    = 1800
+command_hash = { path = "scripts/host-snippets/angular-install.sh", sha256 = "sha256:REPLACE_WITH_REAL_HASH" }
+
+[project.project_php.jobs.angular-reinstall]
+command            = "npm"
+args               = ["ci", "--include=dev"]
+cwd                = "src/angular"
+timeout_s          = 1800
+kill_after_s       = 15
+mutates_filesystem = true
+description        = "Clean rebuild of angular/node_modules from package-lock.json"
+
+[project.project_php.jobs.angular-up]
+command      = "bash"
+args         = ["scripts/host-snippets/angular-up.sh"]
+timeout_s    = 30
+command_hash = { path = "scripts/host-snippets/angular-up.sh", sha256 = "sha256:REPLACE_WITH_REAL_HASH" }
+
+[project.project_php.jobs.angular-down]
+command      = "bash"
+args         = ["scripts/host-snippets/angular-down.sh"]
+timeout_s    = 15
+command_hash = { path = "scripts/host-snippets/angular-down.sh", sha256 = "sha256:REPLACE_WITH_REAL_HASH" }
+
+
+# ── frontend tools (generic npm / tsc / jest) ────────────────────────
+[project.project_php.jobs.npm-install]
+command   = "npm"
+args      = ["install"]
+cwd       = "src/angular"
+timeout_s = 600
+
+[project.project_php.jobs.tsc-check]
+command   = "npx"
+args      = ["tsc", "--noEmit"]
+cwd       = "src/angular"
+timeout_s = 120
+
+[project.project_php.jobs.jest-filter]
+command   = "npx"
+args      = ["jest", "--testNamePattern", "{filter}"]
+cwd       = "src/angular"
+timeout_s = 300
+[project.project_php.jobs.jest-filter.placeholders.filter]
+regex    = "^[A-Za-z0-9 ._-]+$"
+required = true

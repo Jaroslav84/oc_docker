@@ -1,5 +1,5 @@
 # ── 8. Tmux helpers (optional) ──────────────────────────────────────────────
-header_tui "8/11  Tmux helpers (optional)"
+header_tui "8/12  Tmux helpers (optional)"
 info "Pick which tmux modes you want for ${secondary_accent}cld${RESET} / ${secondary_accent}ocd${RESET}."
 info "Each ticked box bakes its bits into the image. Unticked = not installed."
 
@@ -69,17 +69,18 @@ if [[ "$TMUX_ENABLE" =~ ^[Yy] ]]; then
 
     # Codeman web UI is password-guarded — prompt only when it's actually selected.
     if [ "$CODEMAN_SELECTED" = "true" ]; then
-        CUR_CODEMAN_PW="$(_read_env_var CODEMAN_PASSWORD "$SCRIPT_DIR/.env")"
+        _prefill_key CDMN_P4SS
+        CUR_CODEMAN_PW="$CUR"
         if [ -n "$CUR_CODEMAN_PW" ]; then
-            ask_tui "CODEMAN_PASSWORD" "$CUR_CODEMAN_PW" NEW_CODEMAN_PW "$TREE_MID" 1 0 "" 0 "" "$(_mask_secret "$CUR_CODEMAN_PW")"
+            ask_tui "CDMN_P4SS" "$CUR_CODEMAN_PW" NEW_CODEMAN_PW "$TREE_MID" 1 0 "" 0 "" "$(_mask_secret "$CUR_CODEMAN_PW")"
         else
-            ask_tui "CODEMAN_PASSWORD" "" NEW_CODEMAN_PW "$TREE_MID" 1 0 "" 0 "(login password for the Codeman web UI on :3000)"
+            ask_tui "CDMN_P4SS" "" NEW_CODEMAN_PW "$TREE_MID" 1 0 "" 0 "(login password for the Codeman web UI on :3000)"
         fi
         [ -z "$NEW_CODEMAN_PW" ] && NEW_CODEMAN_PW="$CUR_CODEMAN_PW"
         if [ -z "$NEW_CODEMAN_PW" ]; then
-            warn "No password saved — the Codeman web UI will reject logins until you add CODEMAN_PASSWORD to .env."
+            warn "No password saved — the Codeman web UI will reject logins until you add CDMN_P4SS to .env."
         else
-            _update_env_var CODEMAN_PASSWORD "$NEW_CODEMAN_PW"
+            _update_env_var CDMN_P4SS "$NEW_CODEMAN_PW"
             success "Codeman password saved to .env"
         fi
     fi

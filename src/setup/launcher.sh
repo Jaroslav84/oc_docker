@@ -91,32 +91,81 @@ _teardown_builder_api() {
 # _maybe_start_api TOOL PROJECT_DIR — spawn the builder-api daemon (+ panels)
 # when --api / -a was passed. Shared by cld + ocd; $1 is the log tag (CLD/OCD).
 # The osascript spawn invocation is identical for both tools.
+# _project_shard_lookup NAME FIELD — walks the two host-shard candidates
+# ($HOME/.llm-docker/api_config/{<name>.toml, builder-api.toml}) looking for
+# a [project.<NAME>] block (bare OR quoted: [project."NAME"]). If FIELD is
+# "--exists", prints "yes" on match. Otherwise prints the first matching
+# field value from within the block. Exit 0 on hit, 1 on miss.
+_project_shard_lookup() {
+    local _name="$1" _field="$2"
+    local _cfg_dir="${HOME}/.llm-docker/api_config"
+    local _f _out
+    for _f in "$_cfg_dir/${_name}.toml" "$_cfg_dir/builder-api.toml"; do
+        [ -f "$_f" ] || continue
+        _out=$(awk -v n="$_name" -v fld="$_field" '
+            BEGIN {
+                # Escape regex metacharacters in the project name so a name
+                # like "my.project" matches literally, not as "myXproject".
+                n_esc = n
+                gsub(/[][().*+?{}|^$\\]/, "\\\\&", n_esc)
+                # Header matches: [project.NAME] or [project."NAME"] (with optional whitespace).
+                hdr_re = "^[[:space:]]*\\[project\\.(\"" n_esc "\"|" n_esc ")\\][[:space:]]*$"
+            }
+            $0 ~ hdr_re {
+                in_block = 1
+                if (fld == "--exists") { print "yes"; exit }
+                next
+            }
+            in_block && /^[[:space:]]*\[/ { in_block = 0 }
+            in_block && fld != "--exists" {
+                re = "^[[:space:]]*" fld "[[:space:]]*="
+                if ($0 ~ re) {
+                    sub(re "[[:space:]]*", "")
+                    gsub(/[[:space:]]*(#.*)?$/, "")
+                    # Strip surrounding quotes if present.
+                    gsub(/^["'\'']/, ""); gsub(/["'\'']$/, "")
+                    # Numeric fields (port): strip trailing non-digits.
+                    if (fld == "port") gsub(/[^0-9].*$/, "")
+                    print; exit
+                }
+            }
+        ' "$_f")
+        if [ -n "$_out" ]; then
+            printf '%s' "$_out"
+            return 0
+        fi
+    done
+    return 1
+}
+
 _maybe_start_api() {
     [ "$START_API" = true ] || return 0
 
     local _tag="$1" project_dir="$2"
     local project_name
     project_name="$(basename "$project_dir")"
+    # Strip leading dot — dot-dirs (~/.llm-docker etc.) are hidden config,
+    # not projects; treating them as ".llm-docker" builds a nonsensical
+    # [project..llm-docker] block name in the soft-skip probe.
+    project_name="${project_name#.}"
+
+    # Soft-skip: a project can legitimately have zero builder-api config (no
+    # secrets, no jobs — just wants to run inside llm-docker). In that case
+    # the daemon would hard-fail at boot ("no [project.<name>]…"); skip the
+    # spawn cleanly instead so the panel doesn't flash a scary error.
+    local _cfg_dir="${HOME}/.llm-docker/api_config"
+    if [ ! -d "$_cfg_dir" ]; then
+        _log "$_tag" WARNING "-a asked for, but $_cfg_dir/ doesn't exist — skipping builder-api. Create the dir and drop a project shard to enable."
+        return 0
+    fi
+    if ! _project_shard_lookup "$project_name" --exists >/dev/null 2>&1; then
+        _log "$_tag" WARNING "-a asked for, but no [project.$project_name] block found — skipping builder-api. Add $_cfg_dir/${project_name}.toml (or a block in builder-api.toml) to enable."
+        return 0
+    fi
+
+    # Port precedence: per-project shard → base → llm-docker.conf → 6666.
     local port
-    # Port precedence: per-project shard ~/.llm-docker/api_config/<name>.toml →
-    # base ~/.llm-docker/api_config/builder-api.toml → llm-docker.conf → 6666.
-    local host_shard="${HOME}/.llm-docker/api_config/${project_name}.toml"
-    local host_base="${HOME}/.llm-docker/api_config/builder-api.toml"
-    local _f
-    for _f in "$host_shard" "$host_base"; do
-        [ -f "$_f" ] || continue
-        port=$(awk -v p="project.$project_name" '
-            $0 ~ "^\\[" p "\\]" { in_block=1; next }
-            in_block && /^\[/ { in_block=0 }
-            in_block && /^[[:space:]]*port[[:space:]]*=/ {
-                gsub(/^[[:space:]]*port[[:space:]]*=[[:space:]]*/, "")
-                gsub(/[^0-9].*$/, "")
-                print; exit
-            }
-        ' "$_f")
-        [ -n "${port:-}" ] && break
-    done
-    unset _f
+    port="$(_project_shard_lookup "$project_name" port 2>/dev/null)"
     if [ -z "${port:-}" ]; then
         port="$(_read_env_var BUILDER_API_PORT "$SCRIPT_DIR/llm-docker.conf" 2>/dev/null)"
     fi
@@ -161,7 +210,7 @@ _maybe_start_api() {
         if [ -x "$SCRIPT_DIR/cld-status" ]; then
             status_cmd="exec $SCRIPT_DIR/cld-status"
         fi
-        # cld-verbose needs BUILDER_API_PASSWORD to auth the /ws stream, but
+        # cld-verbose needs BUILDER_API_P4SS to auth the /ws stream, but
         # (unlike the api pane) it isn't handed the daemon's secrets. Give it
         # its OWN short-lived handoff: source it for the password, delete it,
         # then exec. Falls back to a bare exec (cld-verbose warns) if none.

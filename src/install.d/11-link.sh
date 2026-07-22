@@ -1,5 +1,5 @@
 # ── 11. Link cld / ocd ──────────────────────────────────────────────────────
-header_tui "11/11  Linking cld + ocd to /usr/local/bin"
+header_tui "11/12  Linking cld + ocd to /usr/local/bin"
 NEED_SUDO=false
 [ ! -w /usr/local/bin ] && NEED_SUDO=true
 

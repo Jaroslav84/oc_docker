@@ -39,8 +39,7 @@ run_opencode_container() {
     # Slot N → 8884 + (N - 1). No slot → base port with auto-bump when taken.
     # See cld for the same logic.
     SSH_PORT_MAPPING=""
-    SSH_HOST_KEY_MOUNT=""
-    if [ "${LLM_DOCKER_SSH_ENABLED:-false}" = "true" ]; then
+    if [ "${LLM_D0CKER_SHH_EN4BLED:-false}" = "true" ]; then
         _SSH_BASE="${LLM_DOCKER_SSH_HOST_PORT:-8884}"
         _SSH_CONTAINER="${LLM_DOCKER_SSH_PORT:-22}"
         if [ -n "$SLOT" ]; then
@@ -60,14 +59,11 @@ run_opencode_container() {
             fi
         fi
         SSH_PORT_MAPPING="-p ${_SSH_HOST_PORT}:${_SSH_CONTAINER}"
-        SSH_HOST_KEY_MOUNT="-v $HOME/.llm-docker/ssh:/etc/ssh/keys"
     fi
 
-    # Outbound SSH: mount user-supplied client keys + config (read-only) so
-    # `ssh <host>` works from inside the container (e.g. a LAN PS4). Only when
-    # ~/.llm-docker/ssh-out/ exists; the entrypoint installs it with strict perms.
-    SSH_OUT_MOUNT=""
-    [ -d "$HOME/.llm-docker/ssh-out" ] && SSH_OUT_MOUNT="-v $HOME/.llm-docker/ssh-out:/root/.ssh-out:ro"
+    # SSH host keys + outbound keys come from the env-gorilla vault at
+    # container start (see docker-entrypoint.sh + setup-ssh.sh). Keys live
+    # in the ssh-agent's memory only, never on disk.
 
     # Session restore resolution:
     #   -c <UUID>     → RESUME_SESSION (direct)
@@ -113,7 +109,7 @@ run_opencode_container() {
     fi
 
     # Cap/security flags from the same source-of-truth cld uses.
-    _compute_cap_flags "${SANDBOX_ENABLED:-true}" "${INTERNET_ACCESS:-true}" "${LLM_DOCKER_SSH_ENABLED:-false}" CAP_DROP CAP_ADD SECURITY_OPT
+    _compute_cap_flags "${SANDBOX_ENABLED:-true}" "${INTERNET_ACCESS:-true}" "${LLM_D0CKER_SHH_EN4BLED:-false}" CAP_DROP CAP_ADD SECURITY_OPT
 
     # Forward both config files into the container as env. Docker accepts
     # multiple --env-file flags; conf first so .env can still override.
@@ -181,8 +177,6 @@ run_opencode_container() {
         -v "$SCRIPT_DIR/../README.md:/opt/llm-docker/README.md:ro" \
         -v "$SCRIPT_DIR/ascii/llm-docker.txt:/opt/llm-docker/ascii.txt:ro" \
         -v "$SCRIPT_DIR/docker/colorize.sh:/opt/llm-docker/colorize.sh:ro" \
-        $SSH_HOST_KEY_MOUNT \
-        $SSH_OUT_MOUNT \
         -e NODE_ENV="${NODE_ENV:-production}" \
         -e SANDBOX_ENABLED="${SANDBOX_ENABLED:-true}" \
         -e INTERNET_ACCESS="${INTERNET_ACCESS:-true}" \

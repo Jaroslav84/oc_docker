@@ -1,13 +1,13 @@
 # ──────────────────────────────────────────────────────────────────────
-# builder-api host config — BASE — copy to ~/.llm-docker/builder-api.toml
+# builder-api host config — BASE — installs to ~/.llm-docker/api_config/builder-api.toml
 # ──────────────────────────────────────────────────────────────────────
 #
 # v3.0 layout:
 #
 #   ~/.llm-docker/
-#     builder-api.toml        ← this file (defaults, globals, langs, verbs)
-#     projects/
-#       <name>.toml           ← one shard per project (host-owned, never bind-mounted)
+#     api_config/
+#       builder-api.toml      ← THIS file: base (defaults, globals, langs, verbs)
+#       <name>.toml           ← one project shard per project (host-owned, never bind-mounted)
 #
 # Containers (Claude / OpenCode) can read the resolved job list via
 # GET /jobs and execute via POST /job/<name>, but they CANNOT change
@@ -54,17 +54,17 @@
 #   5. Long-lived services do NOT belong here. The daemon group-kills
 #      the job's process tree on exit ON PURPOSE. Use launchd or run
 #      the service from a user-supervised Terminal instead.
-#   6. Project shards under projects/ may NOT declare [jobs.*],
+#   6. Project shards under api_config/ may NOT declare [jobs.*],
 #      [language.*], [verb.*], or [defaults] — those live ONLY here.
 #      The daemon refuses to start a shard that tries.
-#   7. ~/.llm-docker/projects/ MUST NOT be bind-mounted into any
+#   7. ~/.llm-docker/api_config/ MUST NOT be bind-mounted into any
 #      container. Host-owned config stays host-owned.
 # ──────────────────────────────────────────────────────────────────────
 
 
 # ── Defaults ──────────────────────────────────────────────────────────
 [defaults]
-password = "${BUILDER_API_PASSWORD}"
+password = "${BUILDER_API_P4SS}"
 log_dir  = "~/.llm-docker/logs"
 bind     = "127.0.0.1"
 

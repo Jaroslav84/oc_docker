@@ -1,5 +1,5 @@
 # ── 9. Optional devpacks (build-time) ───────────────────────────────────────
-header_tui "9/11  Optional devpacks (build-time)"
+header_tui "9/12  Optional devpacks (build-time)"
 info "These flags bake extra tooling into the image. Flipping them only takes"
 info "effect after ${secondary_accent}docker rmi llm-docker:latest${RESET} forces a rebuild."
 

@@ -75,6 +75,11 @@ def render_http_call(rec: dict) -> None:
     status = rec.get("status", 0)
     query = rec.get("query") or {}
     body = rec.get("body", "")
+    # Silence our own discovery probe: cld-verbose calls GET /logs with
+    # no file param on startup to enumerate available log files, which
+    # 400s by design. Showing it looks like the API is broken.
+    if path == "/logs" and method == "GET" and status == 400 and not query.get("file"):
+        return
     _name, (family, color) = _subject_family(path)
     emoji = B._family_emoji(family)
     qs = "  ".join(f"{k}={v}" for k, v in query.items())
@@ -146,7 +151,7 @@ def _discover_log_aliases() -> list[str]:
 
 
 def _header(project: str) -> None:
-    out(B.title_bar(f"VERBOSE · {project}", "213"))
+    out(B.title_bar(f"VERBOSE · {project}", "177"))
     lines = [
         f"{B.C6}live api console — calls · responses · build logs{B.RST}",
     ]

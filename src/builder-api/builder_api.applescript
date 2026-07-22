@@ -254,19 +254,19 @@ on run argv
                         end tell
                     end if
 
-                    -- Rebalance row heights. With a verbose pane the stack is
-                    -- status / api / verbose; give the scrolling console the
-                    -- remainder. Without it, keep the original status=15.
+                    -- Rebalance row heights. Setting rows on both top+bottom
+                    -- panes made iTerm redistribute evenly (equal thirds).
+                    -- Instead: set ONLY the middle pane to 50% of window
+                    -- height — iTerm splits the remaining 50% between top
+                    -- and bottom, giving ~25% each. Without a verbose pane
+                    -- we keep the original status=15 shape.
                     delay 0.2
                     if verboseCmd is not "" then
-                        tell rightPane
-                            try
-                                set rows to 12
-                            end try
-                        end tell
+                        set half to ((rows of current window) / 2) as integer
+                        if half < 10 then set half to 10
                         tell bottomPane
                             try
-                                set rows to 14
+                                set rows to half
                             end try
                         end tell
                     else

@@ -78,6 +78,10 @@ _update_kv() {
     else
         printf "%s=%s\n" "$KEY" "$VALUE" >> "$FILE"
     fi
+    # Enforce mode 600 on secret files — .env holds base64 private keys + API tokens.
+    case "$FILE" in
+        *"/.env") chmod 600 "$FILE" 2>/dev/null || true ;;
+    esac
 }
 _update_env_var()  { _update_kv "$1" "$2" "$SCRIPT_DIR/.env"; }
 _update_conf_var() { _update_kv "$1" "$2" "$SCRIPT_DIR/llm-docker.conf"; }
@@ -150,7 +154,8 @@ _log_silent INSTALL "===== install.sh session started @ $(date '+%Y-%m-%d %H:%M:
 # ── Steps ────────────────────────────────────────────────────────────────────
 # Split into install.d/ for readability. Sourced (NOT subshelled) in order so
 # they share one scope — later steps read vars set by earlier ones.
-for _step_file in 01-docker 02-dirs 03-env 04-workspace 05-apikeys 06-ssh \
+for _step_file in 01-docker 02-dirs 03-env 04-workspace 05-apikeys \
+                  06a-ssh-inbound 06b-ssh-outbound \
                   07-builderapi 08-tmux 09-devpacks 10-image 11-link 99-complete; do
     if [ ! -f "$SCRIPT_DIR/install.d/${_step_file}.sh" ]; then
         printf 'install.sh: missing step install.d/%s.sh — broken install?\n' "$_step_file" >&2

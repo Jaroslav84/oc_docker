@@ -51,7 +51,7 @@ PROJECT_NAME="$(basename "$(cd "$PROJECT_DIR_RAW" 2>/dev/null && pwd)" 2>/dev/nu
 _gorilla_on=false
 grep -q '^IS_S3C_GORILLA_ENABLED=true' "$SCRIPT_DIR/../llm-docker.conf" 2>/dev/null && _gorilla_on=true
 
-if [ -n "${BUILDER_API_PASSWORD:-}" ]; then
+if [ -n "${BUILDER_API_P4SS:-}" ]; then
     export LLM_DOCKER_ENV_GORILLA=1
     ENV_SRC="parent"
 elif [ -z "${LLM_DOCKER_ENV_GORILLA:-}" ] \

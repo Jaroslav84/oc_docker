@@ -3,8 +3,8 @@
 #
 # Lives at src/builder-api/tomlify.sh next to the daemon's other files. Every
 # config file lives under a single directory now:
-#   <repo>/api_config/builder-api.toml   → ~/.llm-docker/api_config/builder-api.toml
-#   <repo>/api_config/<name>.toml        → ~/.llm-docker/api_config/<name>.toml
+#   <repo>/src/builder-api/api_config/builder-api.toml   → ~/.llm-docker/api_config/builder-api.toml
+#   <repo>/src/builder-api/api_config/<name>.toml        → ~/.llm-docker/api_config/<name>.toml
 #
 # Usage (from any cwd; absolute paths are resolved from $BASH_SOURCE):
 #   src/builder-api/tomlify.sh <project-name>   Install one shard
@@ -22,7 +22,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-REPO_API_CONFIG="$REPO_ROOT/api_config"
+# Templates live alongside the daemon at src/builder-api/api_config/.
+REPO_API_CONFIG="$SCRIPT_DIR/api_config"
 REPO_BASE="$REPO_API_CONFIG/builder-api.toml"
 HOST_API_CONFIG="$HOME/.llm-docker/api_config"
 HOST_BASE="$HOST_API_CONFIG/builder-api.toml"

@@ -121,7 +121,7 @@ def _resolve_project_view(
         raise ConfigError(
             f"[project.{project_name}].bind={bind!r} is non-loopback but "
             f"password is empty. Set [defaults].password = "
-            f"\"${{BUILDER_API_PASSWORD}}\" or a project-specific one."
+            f"\"${{BUILDER_API_P4SS}}\" or a project-specific one."
         )
 
     # --- project root ---

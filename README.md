@@ -42,11 +42,10 @@ Then just run:
 
 Check out my other **Docker/AI/Sec** related stuff:
 
-
-* [Clawfather](https://github.com/RussianRoulette84/clawfather) - ClawFather setup wizard is a better, more secure way to install OpenClaw with Docker.
 * [S3C Gorilla](https://github.com/RussianRoulette84/s3c-gorilla) - SSH & ENV injecting into memory using KeePassXC/ TouchID / Secure Enclosure Chip
 * [LLM Snitch](https://github.com/RussianRoulette84/llm-snitch) - Ai Firewall - report (soon block) what your local AI/LLM does — filesystem, keychain, processes, network
-
+* [Clawfather](https://github.com/RussianRoulette84/clawfather) - ClawFather setup wizard is a better, more secure way to install OpenClaw with Docker.
+* 
 ---
 
 ## Why LLM Docker
@@ -83,7 +82,6 @@ It stores all tool data (sessions, config, API keys) outside the container at `~
 Optionally it bind-mounts your `~/Projects` workspace folder into Docker as workspace for all projects.
 
 ---
-
 
 ## 📑 Table of Contents
 
@@ -130,9 +128,10 @@ Optionally it bind-mounts your `~/Projects` workspace folder into Docker as work
 * ✅ **No docker socket access** - `/var/run/docker.sock` is NOT bind-mounted. The container cannot escape via the Docker API.
 * ✅ **Claude agent permission hardening** - `.claude/settings.local.json` ships with ~200 deny rules: secret reads, install scripts, shell-exec escape hatches, chain-operator variants, path-traversal patterns, and explicit container-escape guards (`*docker.sock*`, `nsenter`, `--privileged`, kernel namespace tools).
 * ✅ **Config self-unlock protection** - Claude cannot edit its own `.claude/settings*.json`, `.git/hooks/`, `.github/workflows/`, or `.vscode/tasks.json` — no prompt-injection path to loosen its own rules.
-* ✅ **Builder API host-only config** - All jobs the Builder API can execute live in `~/.llm-docker/builder-api.toml` on the host — outside every bind-mount. Per-project `.builder-api.toml` files are ignored. A prompt-injected agent inside a project container CANNOT add new jobs, edit a job's command, or otherwise widen what runs on your Mac; the daemon refuses to read anything from container-writable paths. Plugin support was removed entirely (was a host-exec escape vector).
+* ✅ **Builder API host-only config** - All jobs the Builder API can execute live in `~/.llm-docker/api_config/` on the host — outside every bind-mount. Per-project `.builder-api.toml` files are ignored. A prompt-injected agent inside a project container CANNOT add new jobs, edit a job's command, or otherwise widen what runs on your Mac; the daemon refuses to read anything from container-writable paths. Plugin support was removed entirely (was a host-exec escape vector).
 * ✅ **SSH key-only authentication** - When SSH is enabled, passwords are disabled (`PasswordAuthentication no`). Root login requires a matching key in `LLM_DOCKER_SSH_AUTHORIZED_KEYS`. Host keys persist across rebuilds for stable fingerprint.
 * ✅ **Graceful cleanup** - Background watchdog kills containers on terminal close, CMD+Q, or crash.
+* ✅ **Delete-safe `rm` shim** - `/usr/local/bin/rm` inside the container routes deletes to the macOS Trash (recoverable) via the builder-api, or `trash-cli` as fallback. Protected roots (`/`, `$HOME`, mount points, `.claude/`, `.config/`) refuse outright. This is **one onion layer** — it catches tools that shell out to `rm`; anything that deletes another way (python `os.remove`, `busybox rm`, `/bin/unlink`, `dd`, `find -delete`, direct syscalls) bypasses it. The layer stacks with the workspace read-only mount + Trash routing + macOS snapshots for real safety.
 
 ### ⚙️ Configuration Features
 
@@ -440,7 +439,10 @@ The daemon lives in [src/builder-api/](src/builder-api/); full developer docs in
 ### ⚙️ Deployment shape
 
 * ✅ **Per-project daemon** — one process per project, launched with `python3 server.py --project <name>` (or via `cld --api` / `ocd -a` which spawn a positioned iTerm pane and derive `<name>` from the project dir basename). Different projects = different ports = different daemons. They never share queue state.
-* ✅ **Single host config** — `~/.llm-docker/builder-api.toml` is the only file the daemon reads. Three-layer schema: `[jobs.<name>]` (global, every project sees them) + `[language.<lang>.jobs.<name>]` (python / php / node / compose packs) + `[project.<name>.jobs.<name>]` (per-project overrides). Copy `src/builder-api/builder-api.host.toml.example` to get started.
+* ✅ **Two-file host config** — the daemon reads from `~/.llm-docker/api_config/` which contains **two kinds** of files:
+  * `builder-api.toml` — the **BASE** file: `[defaults]`, `[verb.<name>]` vocabulary, `[jobs.<name>]` globals (git-status, tree, trash), `[language.<lang>.jobs.<name>]` opt-in packs (python / php / node / compose)
+  * `<project-name>.toml` — one **PROJECT SHARD** per project: `[project.<name>]` header + `[project.<name>.jobs.<name>]` (verb implementations + named jobs)
+  Three-layer resolution: base globals + opted-in language pack + project shard overrides. Copy `src/builder-api/api_config/builder-api.toml` + create your own `~/.llm-docker/api_config/<myapp>.toml` to onboard a new project.
 * ✅ **Python stdlib only** — no `pip install` dance. Runs anywhere with Python 3.11+.
 * ✅ **Docker-side client** — tiny Python HTTP helper in [src/builder-api/client.py](src/builder-api/client.py) (auth + retry + long-poll) the container imports. MCP servers wrap this for tool calls.
 
@@ -461,7 +463,7 @@ Every layer below is enforced. Defeating one is not enough; an attacker has to g
 
 **Config-level (the trust boundary):**
 
-* ✅ **Host-only config** — `~/.llm-docker/builder-api.toml` lives on your Mac, outside every container bind-mount. The container literally cannot see it, read it, or write it. Container-side `Read(~/.llm-docker/**)` returns "no such file."
+* ✅ **Host-only config** — `~/.llm-docker/api_config/` lives on your Mac, outside every container bind-mount. The container literally cannot see it, read it, or write it. Container-side `Read(~/.llm-docker/**)` returns "no such file."
 * ✅ **No new jobs from inside** — every job the daemon will ever run is declared in that host file. The container can NEVER add a new job, modify a `command =`, or widen `allowed_args`. The API has zero write endpoints that touch config.
 * ✅ **Per-project `.builder-api.toml` ignored** — older versions read a config file from the project's own directory (which IS in the container's bind-mount). That code is gone. The daemon explicitly does not look at any path inside a project root.
 * ✅ **No plugin support** — previous versions allowed `plugin = "builder_plugin.py"` to load arbitrary Python into the daemon process. The entire feature is deleted. There's no env-gate or "off by default"; the code path doesn't exist.
@@ -512,7 +514,7 @@ The Builder API is **a hole in the cage by design**. The container is asking the
 
 Below are the seams that remain. Read them. If any of these scenarios feels unacceptable, don't enable Builder API for that project.
 
-* 🚨 **You declared a dangerous job yourself.** If `~/.llm-docker/builder-api.toml` contains:
+* 🚨 **You declared a dangerous job yourself.** If `~/.llm-docker/api_config/` contains:
   ```toml
   [project.foo.jobs.shell]
     command = "/bin/bash"
@@ -544,7 +546,7 @@ Below are the seams that remain. Read them. If any of these scenarios feels unac
 
 ### 🛡️ Safe-use rules
 
-1. **Audit `~/.llm-docker/builder-api.toml` like `sudoers`**. Every job is a "Claude may run this on my Mac." Read each one.
+1. **Audit `~/.llm-docker/api_config/` like `sudoers`**. Every job is a "Claude may run this on my Mac." Read each one.
 2. **No `bash -c` jobs. No `eval` jobs. No "any arg" placeholders (`regex = ".*"`).** If you find yourself writing one, you've lost.
 3. **`command_hash`-pin any job whose binary lives inside a project tree.**
 4. **Prefer host-only command paths** (`/usr/local/bin/foo`, `/opt/...`) over project-relative ones (`vendor/bin/foo`, `scripts/...`) for sensitive jobs.

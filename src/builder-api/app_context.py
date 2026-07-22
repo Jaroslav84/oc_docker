@@ -180,6 +180,8 @@ class AppContext:
                 new_cfg.name, new_cfg.bind, new_cfg.port,
                 list(new_cfg.jobs.keys()),
             )
+            _banner._recent_events.clear()
+            _banner.reset_event_tail()
         except Exception:
             pass
 

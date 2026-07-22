@@ -15,6 +15,16 @@ set -u
 
 SCRIPT_DIR="$( cd "$( dirname "$( realpath "${BASH_SOURCE[0]}" )" )" && pwd )"
 
+# Vault re-exec: if vault mode is on AND we aren't already wrapped, restart via
+# env-gorilla so downstream probes (including the SSH smoke test) see vault-
+# stored env vars.
+if [ -z "${LLM_DOCKER_ENV_GORILLA:-}" ] \
+   && command -v env-gorilla >/dev/null 2>&1 \
+   && grep -q '^IS_S3C_GORILLA_ENABLED=true' "$SCRIPT_DIR/llm-docker.conf" 2>/dev/null; then
+    export LLM_DOCKER_ENV_GORILLA=1
+    exec env-gorilla llm-docker -- bash "$0" "$@"
+fi
+
 RESET=$'\033[0m'; DIM=$'\033[2m'; BOLD=$'\033[1m'
 GREEN=$'\033[32m'; RED=$'\033[31m'; YELLOW=$'\033[33m'
 PURPLE=$'\033[38;5;177m'; BLUE=$'\033[38;5;39m'

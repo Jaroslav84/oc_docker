@@ -1,5 +1,5 @@
 # ── 1. Docker ────────────────────────────────────────────────────────────────
-header_tui "1/11  Checking Docker"
+header_tui "1/12  Checking Docker"
 if ! command -v docker >/dev/null 2>&1; then
     _log INSTALL ERROR "Docker is not installed. Install from https://www.docker.com/products/docker-desktop"
     error "Docker is not installed. See https://www.docker.com/products/docker-desktop"

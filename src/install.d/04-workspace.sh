@@ -1,5 +1,5 @@
 # ── 4. Workspace mount ──────────────────────────────────────────────────────
-header_tui "4/11  Workspace mirror (optional)"
+header_tui "4/12  Workspace mirror (optional)"
 info "Per-invocation mounts always work: cd into a folder, run cld/ocd, that folder mounts."
 info "Enable the persistent mirror to auto-mount WORKSPACE_DIR on every launch."
 

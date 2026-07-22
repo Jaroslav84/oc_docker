@@ -16,7 +16,7 @@
 // Env:
 //   BUILDER_API_HOST      hostname for the daemon (default host.docker.internal)
 //   BUILDER_API_PORT      port (default 6666, but each project usually has its own)
-//   BUILDER_API_PASSWORD  X-Builder-API-Password header value (set in your shell)
+//   BUILDER_API_P4SS  X-Builder-API-Password header value (set in your shell)
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -28,7 +28,7 @@ import { URL } from "node:url";
 const BUILDER_HOST = (process.env.BUILDER_API_HOST || "host.docker.internal").replace(/^"|"$/g, "");
 const BUILDER_PORT = process.env.BUILDER_API_PORT || "6666";
 const BUILDER_BASE = process.env.BUILDER_API_BASE || `http://${BUILDER_HOST}:${BUILDER_PORT}`;
-const BUILDER_PASS = process.env.BUILDER_API_PASSWORD || "";
+const BUILDER_PASS = process.env.BUILDER_API_P4SS || "";
 
 // node's `fetch` (undici) blocks port 6666 as a legacy "unsafe" IRC port even
 // though that's the builder-api's default. Use node:http directly.

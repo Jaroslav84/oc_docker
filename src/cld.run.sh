@@ -114,15 +114,14 @@ run_claude_container() {
     [ -f "$SCRIPT_DIR/.env" ]            && ENV_FILES="$ENV_FILES --env-file $SCRIPT_DIR/.env"
 
     # Single source of truth for cap/security flags (see setup.sh).
-    _compute_cap_flags "$SANDBOX_ENABLED" "$INTERNET_ACCESS" "${LLM_DOCKER_SSH_ENABLED:-false}" CAP_DROP CAP_ADD SECURITY_OPT
+    _compute_cap_flags "$SANDBOX_ENABLED" "$INTERNET_ACCESS" "${LLM_D0CKER_SHH_EN4BLED:-false}" CAP_DROP CAP_ADD SECURITY_OPT
 
     # SSH port publish requires bridge networking (`-p` can't be used with host).
     # With SLOT: offset host port by (SLOT - 1) → slot 1=8884, slot 2=8885, etc.
     # Without SLOT: start at base port and auto-bump upward if it's taken (so
     # a second `cld` without --slot just works instead of erroring on bind).
     SSH_PORT_MAPPING=""
-    SSH_HOST_KEY_MOUNT=""
-    if [ "${LLM_DOCKER_SSH_ENABLED:-false}" = "true" ]; then
+    if [ "${LLM_D0CKER_SHH_EN4BLED:-false}" = "true" ]; then
         _SSH_BASE="${LLM_DOCKER_SSH_HOST_PORT:-8884}"
         _SSH_CONTAINER="${LLM_DOCKER_SSH_PORT:-22}"
         if [ -n "$SLOT" ]; then
@@ -142,15 +141,12 @@ run_claude_container() {
             fi
         fi
         SSH_PORT_MAPPING="-p ${_SSH_HOST_PORT}:${_SSH_CONTAINER}"
-        SSH_HOST_KEY_MOUNT="-v $HOME/.llm-docker/ssh:/etc/ssh/keys"
     fi
 
-    # Outbound SSH: mount user-supplied client keys + config (read-only) so
-    # `ssh <host>` works from inside the container — e.g. to reach a LAN box
-    # like a PS4. Only when ~/.llm-docker/ssh-out/ exists on the host. The
-    # entrypoint copies it into ~/.ssh with strict perms so ssh accepts it.
-    SSH_OUT_MOUNT=""
-    [ -d "$HOME/.llm-docker/ssh-out" ] && SSH_OUT_MOUNT="-v $HOME/.llm-docker/ssh-out:/root/.ssh-out:ro"
+    # SSH host keys + outbound keys come from the env-gorilla vault at
+    # container start (see docker-entrypoint.sh + setup-ssh.sh). No more
+    # ~/.llm-docker/ssh or ~/.llm-docker/ssh-out bind-mounts — keys live
+    # in the ssh-agent's memory only.
 
     # Codeman exposes its web UI on port 3000 — needs bridge networking to
     # publish with `-p`. In host mode the port is already reachable on localhost.
@@ -232,8 +228,6 @@ run_claude_container() {
         -v "$SCRIPT_DIR/ascii/llm-docker.txt:/opt/llm-docker/ascii.txt:ro" \
         -v "$SCRIPT_DIR/docker/colorize.sh:/opt/llm-docker/colorize.sh:ro" \
         -v "$SCRIPT_DIR/llm-container-claude-settings.json:/opt/llm-docker/templates/claude-settings.json:ro" \
-        $SSH_HOST_KEY_MOUNT \
-        $SSH_OUT_MOUNT \
         --network "$NETWORK_MODE" \
         $PORT_MAPPING \
         $CAP_DROP \
