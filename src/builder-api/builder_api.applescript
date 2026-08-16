@@ -336,11 +336,8 @@ on run argv
             end tell
         end tell
     else
-        tell application "Terminal"
-            activate
-            do script cmd
-            set bounds of front window to {winX, winY, screenRight, screenBottom}
-            set custom title of front window to sessionTitle
-        end tell
+        -- iTerm not installed. Do NOT fall back to Terminal.app — this is an
+        -- iTerm-only setup. Error so the caller's shell fallback path runs.
+        error "iTerm not found"
     end if
 end run

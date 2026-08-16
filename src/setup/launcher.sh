@@ -261,10 +261,8 @@ EOF
             _log "$_tag" WARNING "AppleScript blocked by macOS — opened iTerm without positioning. Enable iTerm in Settings → Privacy → Automation to restore."
             return 0
         fi
-        if open -a Terminal "$cmd_file" 2>/dev/null; then
-            _log "$_tag" WARNING "Opened Terminal.app instead of iTerm."
-            return 0
-        fi
+        # iTerm-only setup: never fall back to Terminal.app. If iTerm can't be
+        # reached, background the daemon silently instead of a native window.
 
         # 3) No terminal cooperated — background it.
         _log "$_tag" WARNING "No terminal app available. Backgrounding."

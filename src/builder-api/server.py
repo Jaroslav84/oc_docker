@@ -20,6 +20,7 @@ small per-endpoint function. No decorators, no framework magic.
 """
 from __future__ import annotations
 
+import errno
 import os
 import signal
 import sys
@@ -138,6 +139,11 @@ def main() -> int:
     try:
         server = ThreadingHTTPServer((cfg.bind, cfg.port), BuilderHandler)
     except OSError as e:
+        # Port already taken means a daemon is already serving this project —
+        # nothing to do. Exit clean and quiet; a fresh window/warning here is
+        # just noise the user doesn't care about.
+        if e.errno == errno.EADDRINUSE:
+            return 0
         sys.stderr.write(f"[builder-api] bind failed on {cfg.bind}:{cfg.port}: {e}\n")
         return 1
     server_holder["server"] = server
